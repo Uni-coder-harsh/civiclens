@@ -48,8 +48,29 @@ def prepare_unified_dataset(config: dict) -> Path:
             # Can have VOC XML annotations or YOLO text annotations
             root = Path(ds_info["root"])
             if not root.exists():
-                logger.warning(f"Root path {root} for dataset {key} does not exist. Skipping.")
-                continue
+                logger.info(f"Configured root {root} not found. Attempting auto-resolution under /kaggle/input...")
+                name_query = root.name.lower()
+                candidates = []
+                try:
+                    for p in Path("/kaggle/input").glob("**/*"):
+                        if p.is_dir() and (name_query in p.name.lower() or ("rdd" in name_query and "rdd" in p.name.lower())):
+                            candidates.append(p)
+                except Exception:
+                    pass
+                    
+                if candidates:
+                    def score_path(path):
+                        score = len(path.parts)
+                        if (path / "images").exists() or (path / "label").exists() or (path / "labels").exists():
+                            score += 100
+                        return score
+                    candidates.sort(key=score_path, reverse=True)
+                    root = candidates[0]
+                    logger.info(f"Auto-resolved {key} root to: {root}")
+                else:
+                    logger.warning(f"Root path {ds_info['root']} for dataset {key} does not exist. Skipping.")
+                    continue
+
                 
             # Scan for images
             image_extensions = [".jpg", ".jpeg", ".png", ".PNG", ".JPG"]
@@ -205,8 +226,23 @@ def prepare_unified_dataset(config: dict) -> Path:
         elif ds_info["format"] == "classification":
             root = Path(ds_info["root"])
             if not root.exists():
-                logger.warning(f"Root path {root} for dataset {key} does not exist. Skipping.")
-                continue
+                logger.info(f"Configured root {root} not found. Attempting auto-resolution under /kaggle/input...")
+                name_query = root.name.lower()
+                candidates = []
+                try:
+                    for p in Path("/kaggle/input").glob("**/*"):
+                        if p.is_dir() and (name_query in p.name.lower() or ("sdnet" in name_query and "sdnet" in p.name.lower())):
+                            candidates.append(p)
+                except Exception:
+                    pass
+                    
+                if candidates:
+                    root = candidates[0]
+                    logger.info(f"Auto-resolved {key} root to: {root}")
+                else:
+                    logger.warning(f"Root path {ds_info['root']} for dataset {key} does not exist. Skipping.")
+                    continue
+
                 
             image_extensions = [".jpg", ".jpeg", ".png", ".PNG", ".JPG"]
             img_files = []
