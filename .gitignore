@@ -26,8 +26,9 @@ checkpoints/
 *.tflite
 
 # Dataset
-data/
-datasets/
+/data/
+/datasets/
+
 
 # IDE
 .vscode/

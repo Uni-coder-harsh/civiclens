@@ -1,12 +1,13 @@
 from pathlib import Path
 import datetime
-from src.utils.config import load_config
-from src.utils.seed import set_seed
-from src.utils.logger import setup_logger
-from src.datasets.loader import prepare_unified_dataset
-from src.training.train import train_yolo
-from src.evaluation.evaluate import evaluate_model
-from src.inference.export import export_model_to_onnx
+from ..utils.config import load_config
+from ..utils.seed import set_seed
+from ..utils.logger import setup_logger
+from ..datasets.loader import prepare_unified_dataset
+from .train import train_yolo
+from ..evaluation.evaluate import evaluate_model
+from ..inference.export import export_model_to_onnx
+
 
 def run_pipeline(config_dir: str = None) -> bool:
     """Coordinates the entire loading, preprocessing, training, evaluation, and exporting pipeline."""

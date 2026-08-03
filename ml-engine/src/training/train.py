@@ -1,6 +1,7 @@
 from pathlib import Path
 from ultralytics import YOLO
-from src.utils.logger import setup_logger
+from ..utils.logger import setup_logger
+
 
 logger = setup_logger("training.train")
 
