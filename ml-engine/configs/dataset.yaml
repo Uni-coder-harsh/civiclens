@@ -17,9 +17,13 @@ datasets:
 
   sdnet2018:
     name: "SDNET2018"
-    root: "/kaggle/input/SDNET2018"
+    root: "/kaggle/input/sdnet2018"
     format: "classification"
-    enabled: false # Ignored for detection unless converted/pre-trained
+    enabled: true
+    class_mapping:
+      "cracked": "concrete_crack"
+      "uncracked": null
+
 
   huggingface_bridge:
     name: "concrete-crack-dataset"

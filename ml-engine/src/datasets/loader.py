@@ -193,7 +193,45 @@ def prepare_unified_dataset(config: dict) -> Path:
                             "is_hf": False
                         })
                         
+        elif ds_info["format"] == "classification":
+            root = Path(ds_info["root"])
+            if not root.exists():
+                logger.warning(f"Root path {root} for dataset {key} does not exist. Skipping.")
+                continue
+                
+            image_extensions = [".jpg", ".jpeg", ".png", ".PNG", ".JPG"]
+            img_files = []
+            for ext in image_extensions:
+                img_files.extend(root.glob(f"**/*{ext}"))
+                
+            for img_path in tqdm(img_files, desc=f"Loading classification from {key}"):
+                parent_name = img_path.parent.name
+                
+                # Check mapping first
+                target_class = mapping.get(parent_name)
+                
+                # If not in mapping, apply smart defaults for crack/uncracked structure (e.g. SDNET2018)
+                if target_class is None:
+                    parent_lower = parent_name.lower()
+                    if "uncrack" in parent_lower or parent_lower.startswith("u"):
+                        target_class = "background"
+                    elif "crack" in parent_lower or parent_lower.startswith("c"):
+                        target_class = "concrete_crack"
+                
+                mapped_labels = []
+                if target_class in class_to_idx:
+                    c_idx = class_to_idx[target_class]
+                    # Bounding box covers the entire image for classification data
+                    mapped_labels.append([c_idx, 0.5, 0.5, 1.0, 1.0])
+                    
+                all_records.append({
+                    "image_path": img_path,
+                    "labels": mapped_labels,
+                    "is_hf": False
+                })
+
         elif ds_info["format"] == "hf":
+
             # Hugging Face Dataset loading
             hf_path = ds_info["hf_path"]
             logger.info(f"Loading dataset {hf_path} from Hugging Face hub...")
