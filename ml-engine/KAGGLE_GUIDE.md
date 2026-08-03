@@ -8,8 +8,9 @@ This guide describes how to run the `civiclens` road & bridge damage training pi
 
 When creating a new notebook on Kaggle, configure the environment settings:
 
-* **Accelerator**: GPU T4 x2 or GPU P100 (highly recommended for faster training).
+* **Accelerator**: **GPU T4 x2** (highly recommended. Avoid GPU P100, as Kaggle's pre-installed PyTorch build does not support its Pascal sm_60 compute capability by default).
 * **Internet**: Turn **ON** (needed for `git clone`, `pip install`, and Hugging Face integration).
+
 * **Persistence**: Filesystem - Variables and Files (optional, but convenient).
 
 ---
