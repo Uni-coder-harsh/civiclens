@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ML Outputs
+ai-engine/outputs/
+runs/
+wandb/
+logs/
+checkpoints/
+
+# Models
+*.pt
+*.pth
+*.onnx
+*.engine
+*.tflite
+
+# Dataset
+data/
+datasets/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+
+# Flutter
+.flutter-plugins
+.flutter-plugins-dependencies
+.dart_tool/
+build/
+
