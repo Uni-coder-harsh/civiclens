@@ -27,8 +27,11 @@ datasets:
     format: "hf"
     enabled: true
     class_mapping:
+      "masks_png": "concrete_crack"
+      "image": null
       "crack": "concrete_crack"
       "spalling": "spalling"
+
 target_classes:
   - "pothole"
   - "longitudinal_crack"

@@ -201,63 +201,88 @@ def prepare_unified_dataset(config: dict) -> Path:
                 from datasets import load_dataset
                 # Load the train split
                 hf_ds = load_dataset(hf_path, split="train")
-                
-                # Hugging Face object detection datasets typically feature structure:
-                # { 'image': PIL.Image, 'objects': { 'bbox': [[ymin, xmin, ymax, xmax]], 'category': [0] } }
-                # Let's inspect its features and parse
                 features = hf_ds.features
                 logger.info(f"Hugging Face dataset features: {features}")
                 
-                # Try to locate category class names
-                category_names = []
-                if "objects" in features and "category" in features["objects"].feature:
-                    category_names = features["objects"].feature["category"].names
-                
-                for idx, item in enumerate(tqdm(hf_ds, desc="Parsing HF Dataset")):
-                    # Check if 'image' and 'objects' keys exist
-                    if "image" not in item or "objects" not in item:
-                        continue
+                if "objects" in features:
+                    # 1. Detection format
+                    category_names = []
+                    if "category" in features["objects"].feature:
+                        category_names = features["objects"].feature["category"].names
+                    
+                    for idx, item in enumerate(tqdm(hf_ds, desc="Parsing HF Detection Dataset")):
+                        if "image" not in item or "objects" not in item:
+                            continue
+                            
+                        pil_img = item["image"]
+                        objects = item["objects"]
+                        bboxes = objects.get("bbox", [])
+                        categories = objects.get("category", [])
                         
-                    pil_img = item["image"]
-                    objects = item["objects"]
-                    
-                    bboxes = objects.get("bbox", [])
-                    categories = objects.get("category", [])
-                    
-                    img_w, img_h = pil_img.size
-                    mapped_labels = []
-                    
-                    for bbox, cat_id in zip(bboxes, categories):
-                        # Some HF datasets store category as int, map it to category name
-                        cat_name = category_names[cat_id] if cat_id < len(category_names) else str(cat_id)
-                        target_class = mapping.get(cat_name) or mapping.get(str(cat_name)) or mapping.get(cat_id)
+                        img_w, img_h = pil_img.size
+                        mapped_labels = []
                         
+                        for bbox, cat_id in zip(bboxes, categories):
+                            cat_name = category_names[cat_id] if cat_id < len(category_names) else str(cat_id)
+                            target_class = mapping.get(cat_name) or mapping.get(str(cat_name)) or mapping.get(cat_id)
+                            
+                            if target_class in class_to_idx:
+                                c_idx = class_to_idx[target_class]
+                                if any(val > 1.01 for val in bbox):
+                                    cx, cy, w, h = convert_coco_bbox((img_w, img_h), bbox)
+                                else:
+                                    cx = bbox[0] + bbox[2]/2.0
+                                    cy = bbox[1] + bbox[3]/2.0
+                                    w = bbox[2]
+                                    h = bbox[3]
+                                mapped_labels.append([c_idx, cx, cy, w, h])
+                                
+                        if mapped_labels:
+                            all_records.append({
+                                "image_path": pil_img,
+                                "labels": mapped_labels,
+                                "is_hf": True,
+                                "hf_index": idx
+                            })
+                elif "label" in features or "category" in features:
+                    # 2. Classification or single-label format
+                    label_key = "label" if "label" in features else "category"
+                    category_names = []
+                    
+                    # Inspect names list from ClassLabel if available
+                    label_feature = features[label_key]
+                    if hasattr(label_feature, "names"):
+                        category_names = label_feature.names
+                    
+                    for idx, item in enumerate(tqdm(hf_ds, desc="Parsing HF Classification Dataset")):
+                        if "image" not in item or label_key not in item:
+                            continue
+                            
+                        pil_img = item["image"]
+                        label_val = item[label_key]
+                        
+                        cat_name = category_names[label_val] if label_val < len(category_names) else str(label_val)
+                        target_class = mapping.get(cat_name) or mapping.get(str(cat_name)) or mapping.get(label_val)
+                        
+                        mapped_labels = []
                         if target_class in class_to_idx:
                             c_idx = class_to_idx[target_class]
-                            # Bounding box formats in HF datasets can vary: COCO [xmin, ymin, w, h] is typical.
-                            # We assume standard COCO format. If it is normalized or VOC, handle it.
-                            # Let's check bounding box sizes. If values are <= 1.0, they might be normalized.
-                            if any(val > 1.01 for val in bbox):
-                                # Pixels
-                                cx, cy, w, h = convert_coco_bbox((img_w, img_h), bbox)
-                            else:
-                                # Already normalized coco
-                                cx = bbox[0] + bbox[2]/2.0
-                                cy = bbox[1] + bbox[3]/2.0
-                                w = bbox[2]
-                                h = bbox[3]
-                            mapped_labels.append([c_idx, cx, cy, w, h])
+                            # Bounding box covers the entire image for classification
+                            mapped_labels.append([c_idx, 0.5, 0.5, 1.0, 1.0])
                             
-                    if mapped_labels:
+                        # Even if mapped_labels is empty, we add it to serve as a background image (negative sample)
                         all_records.append({
                             "image_path": pil_img,
                             "labels": mapped_labels,
                             "is_hf": True,
                             "hf_index": idx
                         })
-                        
+                else:
+                    logger.warning(f"Unsupported Hugging Face dataset feature structure: {features}")
+                    
             except Exception as e:
                 logger.error(f"Failed to load/parse HF dataset {hf_path}: {e}")
+
                 
     if not all_records:
         raise ValueError("No records found in any of the configured and enabled datasets. Please double check dataset mounts/configurations.")
