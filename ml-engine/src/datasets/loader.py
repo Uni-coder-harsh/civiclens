@@ -83,13 +83,22 @@ def prepare_unified_dataset(config: dict) -> Path:
                 elif xml_path.exists():
                     boxes = parse_voc_xml(xml_path)
                 else:
-                    # Look for YOLO .txt file in sibling labels directory
-                    txt_cand = None
-                    if "images" in parts:
+                    # Look for YOLO .txt file
+                    txt_cand = img_path.with_suffix(".txt")
+                    
+                    if not txt_cand.exists() and "images" in parts:
                         idx = parts.index("images")
+                        # Try sibling 'labels' folder
                         parts_txt = parts.copy()
                         parts_txt[idx] = "labels"
                         txt_cand = Path(*parts_txt).with_suffix(".txt")
+                        
+                        # Try sibling 'label' folder (singular) if 'labels' doesn't exist
+                        if not txt_cand.exists():
+                            parts_txt_singular = parts.copy()
+                            parts_txt_singular[idx] = "label"
+                            txt_cand = Path(*parts_txt_singular).with_suffix(".txt")
+
                         
                     if txt_cand and txt_cand.exists():
                         # Parse YOLO txt
