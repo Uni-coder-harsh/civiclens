@@ -37,6 +37,14 @@ class Settings(BaseSettings):
     MINIO_SECURE: bool = False
     MINIO_BUCKET_NAME: str = "civiclens-assets"
 
+    # Direct Connection Strings (Neon / Upstash fallback)
+    DATABASE_URL: str | None = None
+    REDIS_URL: str | None = None
+
+    # Email Service (Resend)
+    RESEND_API_KEY: str | None = None
+    RESEND_FROM_EMAIL: str = "noreply@civiclens.com"
+
     # CORS Configs
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 
@@ -45,12 +53,21 @@ class Settings(BaseSettings):
 
     @property
     def database_url(self) -> str:
-        """Constructs the asynchronous PostgreSQL connection URL."""
+        """Constructs or returns the asynchronous PostgreSQL connection URL."""
+        if self.DATABASE_URL:
+            url = self.DATABASE_URL
+            if url.startswith("postgres://"):
+                url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+            elif url.startswith("postgresql://"):
+                url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            return url
         return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     @property
     def redis_url(self) -> str:
-        """Constructs the Redis connection URL."""
+        """Constructs or returns the Redis connection URL."""
+        if self.REDIS_URL:
+            return self.REDIS_URL
         return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
 
     @property
