@@ -11,6 +11,7 @@ SQLAlchemy==2.0.36
 asyncpg==0.30.0
 GeoAlchemy2==0.16.0
 alembic==1.14.0
+greenlet==3.5.4
 
 # Security & Identity
 passlib[argon2]==1.7.4
