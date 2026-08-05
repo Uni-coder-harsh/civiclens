@@ -13,6 +13,27 @@ from app.core.exceptions import BaseAppException
 from app.core.limiter import limiter
 from app.core.logging import logger, setup_logging
 from app.infrastructure.database import async_engine
+from app.modules.auth.router import router as auth_router
+from app.modules.organizations.router import router as organizations_router
+from app.modules.infrastructure.router import router as infrastructure_router
+from app.modules.passport.router import router as passport_router
+from app.modules.inspections.router import router as inspections_router
+from app.modules.ai.router import router as ai_router
+from app.modules.severity.router import router as severity_router
+from app.modules.notifications.router import router as notifications_router
+from app.modules.analytics.router import router as analytics_router
+
+# Import ORM models so SQLAlchemy metadata and string relationships are registered.
+from app.modules.auth import model as auth_models  # noqa: F401
+from app.modules.organizations import model as organization_models  # noqa: F401
+from app.modules.infrastructure import model as infrastructure_models  # noqa: F401
+from app.modules.passport import model as passport_models  # noqa: F401
+from app.modules.inspections import model as inspection_models  # noqa: F401
+from app.modules.ai import model as ai_models  # noqa: F401
+from app.modules.severity import model as severity_models  # noqa: F401
+from app.modules.notifications import model as notification_models  # noqa: F401
+from app.modules.analytics import model as analytics_models  # noqa: F401
+from app.modules.system import model as system_models  # noqa: F401
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -64,6 +85,17 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+api_prefix = "/api/v1"
+app.include_router(auth_router, prefix=api_prefix)
+app.include_router(organizations_router, prefix=api_prefix)
+app.include_router(infrastructure_router, prefix=api_prefix)
+app.include_router(passport_router, prefix=api_prefix)
+app.include_router(inspections_router, prefix=api_prefix)
+app.include_router(ai_router, prefix=api_prefix)
+app.include_router(severity_router, prefix=api_prefix)
+app.include_router(notifications_router, prefix=api_prefix)
+app.include_router(analytics_router, prefix=api_prefix)
 
 # Custom Middleware: Request Tracking & Security Headers
 @app.middleware("http")
