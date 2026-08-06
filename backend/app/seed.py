@@ -53,9 +53,10 @@ async def seed_database():
                 ]),
             ]
             
+            from sqlalchemy.orm import selectinload
             db_roles = {}
             for name, desc, perms in roles_data:
-                stmt = select(Role).where(Role.name == name)
+                stmt = select(Role).where(Role.name == name).options(selectinload(Role.permissions))
                 res = await session.execute(stmt)
                 role = res.scalar_one_or_none()
                 if not role:
