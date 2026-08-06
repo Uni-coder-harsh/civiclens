@@ -50,7 +50,8 @@ def upgrade() -> None:
     sa.Column('version', sa.Integer(), nullable=False),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index('idx_analytics_weather_cache_location_geometry', 'analytics_weather_cache', ['location_geometry'], unique=False, postgresql_using='gist')
+    # Spatial index created automatically by GeoAlchemy2
+    # op.create_index('idx_analytics_weather_cache_location_geometry', 'analytics_weather_cache', ['location_geometry'], unique=False, postgresql_using='gist')
     op.create_index(op.f('ix_analytics_weather_cache_id'), 'analytics_weather_cache', ['id'], unique=False)
     op.create_table('notification_templates',
     sa.Column('name', sa.String(length=100), nullable=False),
@@ -185,7 +186,8 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['organization_id'], ['organizations.id'], ondelete='RESTRICT'),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index('idx_infrastructure_assets_geometry', 'infrastructure_assets', ['geometry'], unique=False, postgresql_using='gist')
+    # Spatial index created automatically by GeoAlchemy2
+    # op.create_index('idx_infrastructure_assets_geometry', 'infrastructure_assets', ['geometry'], unique=False, postgresql_using='gist')
     op.create_index(op.f('ix_infrastructure_assets_id'), 'infrastructure_assets', ['id'], unique=False)
     op.create_index(op.f('ix_infrastructure_assets_organization_id'), 'infrastructure_assets', ['organization_id'], unique=False)
     op.create_table('role_permissions',
@@ -429,7 +431,8 @@ def upgrade() -> None:
     sa.ForeignKeyConstraint(['inspection_id'], ['inspections.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index('idx_inspection_items_location_geometry', 'inspection_items', ['location_geometry'], unique=False, postgresql_using='gist')
+    # Spatial index created automatically by GeoAlchemy2
+    # op.create_index('idx_inspection_items_location_geometry', 'inspection_items', ['location_geometry'], unique=False, postgresql_using='gist')
     op.create_index(op.f('ix_inspection_items_id'), 'inspection_items', ['id'], unique=False)
     op.create_table('automated_assessments',
     sa.Column('inspection_item_id', sa.UUID(), nullable=False),
@@ -520,7 +523,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_automated_assessments_id'), table_name='automated_assessments')
     op.drop_table('automated_assessments')
     op.drop_index(op.f('ix_inspection_items_id'), table_name='inspection_items')
-    op.drop_index('idx_inspection_items_location_geometry', table_name='inspection_items', postgresql_using='gist')
+    # op.drop_index('idx_inspection_items_location_geometry', table_name='inspection_items', postgresql_using='gist')
     op.drop_table('inspection_items')
     op.drop_index(op.f('ix_asset_degradation_history_id'), table_name='asset_degradation_history')
     op.drop_table('asset_degradation_history')
@@ -549,7 +552,7 @@ def downgrade() -> None:
     op.drop_table('role_permissions')
     op.drop_index(op.f('ix_infrastructure_assets_organization_id'), table_name='infrastructure_assets')
     op.drop_index(op.f('ix_infrastructure_assets_id'), table_name='infrastructure_assets')
-    op.drop_index('idx_infrastructure_assets_geometry', table_name='infrastructure_assets', postgresql_using='gist')
+    # op.drop_index('idx_infrastructure_assets_geometry', table_name='infrastructure_assets', postgresql_using='gist')
     op.drop_table('infrastructure_assets')
     op.drop_index(op.f('ix_departments_id'), table_name='departments')
     op.drop_table('departments')
@@ -566,7 +569,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_notification_templates_id'), table_name='notification_templates')
     op.drop_table('notification_templates')
     op.drop_index(op.f('ix_analytics_weather_cache_id'), table_name='analytics_weather_cache')
-    op.drop_index('idx_analytics_weather_cache_location_geometry', table_name='analytics_weather_cache', postgresql_using='gist')
+    # op.drop_index('idx_analytics_weather_cache_location_geometry', table_name='analytics_weather_cache', postgresql_using='gist')
     op.drop_table('analytics_weather_cache')
     op.drop_index(op.f('ix_ai_models_id'), table_name='ai_models')
     op.drop_table('ai_models')
