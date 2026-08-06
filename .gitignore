@@ -32,7 +32,7 @@ checkpoints/
 
 # IDE
 .vscode/
-.idea/
+flutter-app/.idea/
 
 # OS
 .DS_Store
@@ -44,6 +44,7 @@ Thumbs.db
 # Flutter
 .flutter-plugins
 .flutter-plugins-dependencies
-.dart_tool/
+flutter-app/.dart_tool/
 build/
 
+docs/
