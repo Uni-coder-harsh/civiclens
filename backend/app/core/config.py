@@ -60,7 +60,25 @@ class Settings(BaseSettings):
                 url = url.replace("postgres://", "postgresql+asyncpg://", 1)
             elif url.startswith("postgresql://"):
                 url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
-            return url
+            
+            # Clean up query string params for asyncpg compatibility
+            from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
+            parsed = urlparse(url)
+            query_params = parse_qsl(parsed.query)
+            
+            filtered_params = []
+            for k, v in query_params:
+                if k == "sslmode":
+                    # Convert sslmode to ssl
+                    if v in ("require", "verify-ca", "verify-full"):
+                        filtered_params.append(("ssl", "require"))
+                elif k in ("ssl", "timeout", "command_timeout"):
+                    filtered_params.append((k, v))
+                # Explicitly drop unsupported parameters like channel_binding
+            
+            new_query = urlencode(filtered_params)
+            parsed = parsed._replace(query=new_query)
+            return urlunparse(parsed)
         return f"postgresql+asyncpg://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
 
     @property
