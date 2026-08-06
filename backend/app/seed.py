@@ -60,12 +60,10 @@ async def seed_database():
                 res = await session.execute(stmt)
                 role = res.scalar_one_or_none()
                 if not role:
-                    role = Role(name=name, description=desc)
+                    role = Role(name=name, description=desc, permissions=perms)
                     session.add(role)
-                    await session.flush()
-                
-                # Assign permissions to role
-                role.permissions = perms
+                else:
+                    role.permissions = perms
                 db_roles[name] = role
 
             # 3. Seed Default Organization
@@ -90,7 +88,7 @@ async def seed_database():
             admin_user = res.scalar_one_or_none()
             if not admin_user:
                 admin_user = User(
-                    role_id=db_roles[RoleEnum.SUPER_ADMIN.value].id,
+                    role=db_roles[RoleEnum.SUPER_ADMIN.value],
                     email=admin_email,
                     hashed_password=hash_password("AdminSecureP@ss123"),
                     full_name="System Administrator",
