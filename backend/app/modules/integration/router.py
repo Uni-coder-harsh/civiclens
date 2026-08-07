@@ -764,3 +764,100 @@ async def sync_pending_drafts(drafts: List[ReportPayloadSchema]):
         })
     store.save()
     return results
+
+# =====================================================================
+# Auth Integration Schemas & Endpoints
+# =====================================================================
+
+class OTPSendRequest(BaseModel):
+    phone: str
+
+class OTPVerifyRequest(BaseModel):
+    phone: str
+    otp: str
+
+class SwitchRoleRequest(BaseModel):
+    role: str
+
+class AuthSessionResponseSchema(BaseModel):
+    userId: str
+    accessToken: Optional[str] = None
+    refreshToken: Optional[str] = None
+    isGuest: bool
+    role: str
+    isIdentityVerified: bool
+    phoneNumber: Optional[str] = None
+    displayName: Optional[str] = None
+
+@router.post("/auth/guest", response_model=AuthSessionResponseSchema)
+async def auth_guest():
+    return {
+        "userId": "guest_user",
+        "accessToken": None,
+        "refreshToken": None,
+        "isGuest": True,
+        "role": "citizen",
+        "isIdentityVerified": False,
+        "phoneNumber": None,
+        "displayName": None
+    }
+
+@router.post("/auth/otp/send")
+async def auth_otp_send(body: OTPSendRequest):
+    return {"message": "Verification code dispatched if account exists."}
+
+@router.post("/auth/otp/verify", response_model=AuthSessionResponseSchema)
+async def auth_otp_verify(body: OTPVerifyRequest):
+    if body.otp != "123456":
+        raise HTTPException(status_code=400, detail="Invalid OTP code. Use 123456 for testing.")
+    
+    phone = body.phone
+    if phone.endswith("9999") or phone == "+919876543210":
+        role = "officer"
+        display_name = "Officer Sharma - Ward 4 Engineer"
+    elif phone.endswith("8888") or phone == "+919876543211":
+        role = "contractor"
+        display_name = "Apex Infra Projects Ltd"
+    else:
+        role = "citizen"
+        display_name = "Verified Citizen"
+        
+    return {
+        "userId": f"user_{phone.replace('+', '').replace(' ', '')}",
+        "accessToken": f"mock_access_token_{int(datetime.now(timezone.utc).timestamp())}",
+        "refreshToken": "mock_refresh_token",
+        "isGuest": False,
+        "role": role,
+        "isIdentityVerified": True,
+        "phoneNumber": phone,
+        "displayName": display_name
+    }
+
+@router.post("/auth/switch-role", response_model=AuthSessionResponseSchema)
+async def auth_switch_role(body: SwitchRoleRequest):
+    role = body.role
+    if role == "officer":
+        display_name = "Officer Sharma - Ward 4 Engineer"
+    elif role == "contractor":
+        display_name = "Apex Infra Projects Ltd"
+    elif role == "admin":
+        display_name = "System Administrator"
+    else:
+        role = "citizen"
+        display_name = "Verified Citizen"
+        
+    return {
+        "userId": "user_demo",
+        "accessToken": "demo_token",
+        "refreshToken": "mock_refresh_token",
+        "isGuest": False,
+        "role": role,
+        "isIdentityVerified": True,
+        "phoneNumber": "+919876543210",
+        "displayName": display_name
+    }
+
+@router.post("/auth/logout", status_code=204)
+async def auth_logout():
+    return None
+

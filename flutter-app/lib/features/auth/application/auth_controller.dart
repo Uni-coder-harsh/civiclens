@@ -1,11 +1,15 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/auth/auth_session.dart';
+import '../../../core/config/app_config.dart';
+import '../../../core/network/api_providers.dart';
 import '../../../shared/ticket.dart';
 import '../data/auth_repository.dart';
 
 /// Provider exposing the [AuthRepository] implementation.
 final authRepositoryProvider = Provider<AuthRepository>((ref) {
-  return MockAuthRepository();
+  return AppConfig.useMockApi
+      ? MockAuthRepository()
+      : RemoteAuthRepository(dio: ref.watch(dioProvider));
 });
 
 /// AsyncNotifier that manages the full authentication lifecycle.

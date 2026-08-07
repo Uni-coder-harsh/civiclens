@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:dio/dio.dart';
 import '../../../core/auth/auth_session.dart';
 import '../../../shared/ticket.dart';
 
@@ -126,5 +127,92 @@ class MockAuthRepository implements AuthRepository {
       case UserRole.citizen:
         return 'Verified Citizen';
     }
+  }
+}
+
+/// Remote implementation of [AuthRepository] communicating with the backend.
+class RemoteAuthRepository implements AuthRepository {
+  final Dio dio;
+  static const _sessionKey = 'civiclens_auth_session';
+
+  RemoteAuthRepository({required this.dio});
+
+  @override
+  Future<AuthSession> signInAsGuest() async {
+    try {
+      final response = await dio.post('/v1/auth/guest');
+      final session = AuthSession.fromJson(response.data as Map<String, dynamic>);
+      await _persist(session);
+      return session;
+    } catch (_) {
+      final session = AuthSession.guest();
+      await _persist(session);
+      return session;
+    }
+  }
+
+  @override
+  Future<AuthSession> requestOtp(String phone) async {
+    await dio.post(
+      '/v1/auth/otp/send',
+      data: {'phone': phone},
+    );
+    final session = AuthSession(
+      userId: 'pending_${phone.replaceAll(RegExp(r'[^0-9]'), '')}',
+      isGuest: true,
+      role: UserRole.citizen,
+      phoneNumber: phone,
+    );
+    await _persist(session);
+    return session;
+  }
+
+  @override
+  Future<AuthSession> verifyOtp(String phone, String otp) async {
+    final response = await dio.post(
+      '/v1/auth/otp/verify',
+      data: {'phone': phone, 'otp': otp},
+    );
+    final session = AuthSession.fromJson(response.data as Map<String, dynamic>);
+    await _persist(session);
+    return session;
+  }
+
+  @override
+  Future<AuthSession> switchDemoRole(UserRole targetRole) async {
+    final response = await dio.post(
+      '/v1/auth/switch-role',
+      data: {'role': targetRole.name},
+    );
+    final session = AuthSession.fromJson(response.data as Map<String, dynamic>);
+    await _persist(session);
+    return session;
+  }
+
+  @override
+  Future<void> signOut() async {
+    try {
+      await dio.post('/v1/auth/logout');
+    } catch (_) {}
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_sessionKey);
+  }
+
+  @override
+  Future<AuthSession?> getCurrentSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_sessionKey);
+    if (raw == null) return null;
+    try {
+      final json = jsonDecode(raw) as Map<String, dynamic>;
+      return AuthSession.fromJson(json);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _persist(AuthSession session) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_sessionKey, jsonEncode(session.toJson()));
   }
 }
