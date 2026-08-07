@@ -48,3 +48,4 @@ flutter-app/.dart_tool/
 build/
 
 docs/
+.idea/
