@@ -27,56 +27,106 @@ class MockInfrastructureApi implements InfrastructureApi {
   void _seedData() {
     final now = DateTime.now().toUtc();
 
-    // Seeded Contractor Identity
-    const contractorSummary = ContractorSummary(
-      contractorId: 'ctr_pune_infra',
-      companyName: 'Pune Infra Buildtech Ltd',
-      grade: 4.6,
-      activeDefects: 3,
-      completedProjects: 42,
-      streakMonths: 8,
-      kycVerified: true,
-    );
-    _leaderboard.add(contractorSummary);
-
-    _passports['ctr_pune_infra'] = ContractorPassport(
-      summary: contractorSummary,
-      projects: [
-        ContractorProject(
-          projectId: 'prj_01',
-          name: 'Z-Bridge Structural Maintenance',
-          scope: 'bridge',
-          zone: 'Pune Central',
-          startedAtUtc: now.subtract(const Duration(days: 120)),
-          completedAtUtc: now.subtract(const Duration(days: 10)),
-          rating: 4.8,
-          defectsAttributed: 12,
-        ),
-      ],
-      defects: [
-        ContractorDefectRef(
-          reportId: 'report_04',
-          category: ReportCategory.roadCrack,
-          status: DefectStatus.assigned,
-          reportedAtUtc: now.subtract(const Duration(days: 2)),
-          severityWeight: 1.5,
-        ),
-      ],
-      scoreBreakdown: const ScoreBreakdown(
-        quality: 4.7,
-        timeliness: 4.5,
-        safety: 4.8,
-        compliance: 4.4,
+    // Seeded Contractor Identities
+    final contractors = [
+      const ContractorSummary(
+        contractorId: 'ctr_pune_infra',
+        companyName: 'Pune Infra Buildtech Ltd',
+        grade: 4.8,
+        activeDefects: 2,
+        completedProjects: 48,
+        streakMonths: 12,
+        kycVerified: true,
       ),
-      warranties: [
-        WarrantyState(
-          defectId: 'report_07',
-          warrantyExpiresAtUtc: now.add(const Duration(days: 355)),
-          recurrences: 0,
-          scorePenaltyApplied: 0.0,
+      const ContractorSummary(
+        contractorId: 'ctr_apex_roadways',
+        companyName: 'Apex Roadways Infrastructure',
+        grade: 4.6,
+        activeDefects: 3,
+        completedProjects: 36,
+        streakMonths: 8,
+        kycVerified: true,
+      ),
+      const ContractorSummary(
+        contractorId: 'ctr_western_ghats',
+        companyName: 'Western Ghats Bridge Corp',
+        grade: 4.5,
+        activeDefects: 1,
+        completedProjects: 29,
+        streakMonths: 6,
+        kycVerified: true,
+      ),
+      const ContractorSummary(
+        contractorId: 'ctr_deccan_smart',
+        companyName: 'Deccan Smart Urban Works',
+        grade: 4.2,
+        activeDefects: 5,
+        completedProjects: 22,
+        streakMonths: 4,
+        kycVerified: true,
+      ),
+      const ContractorSummary(
+        contractorId: 'ctr_maharashtra_paving',
+        companyName: 'Maharashtra Express Paving',
+        grade: 3.9,
+        activeDefects: 7,
+        completedProjects: 18,
+        streakMonths: 2,
+        kycVerified: false,
+      ),
+    ];
+    _leaderboard.addAll(contractors);
+
+    for (final c in contractors) {
+      _passports[c.contractorId] = ContractorPassport(
+        summary: c,
+        projects: [
+          ContractorProject(
+            projectId: 'prj_${c.contractorId}_01',
+            name: '${c.companyName.split(" ").first} Z-Bridge Structural Care',
+            scope: 'bridge',
+            zone: 'Pune Central',
+            startedAtUtc: now.subtract(const Duration(days: 120)),
+            completedAtUtc: now.subtract(const Duration(days: 10)),
+            rating: c.grade,
+            defectsAttributed: c.activeDefects * 2,
+          ),
+          ContractorProject(
+            projectId: 'prj_${c.contractorId}_02',
+            name: 'FC Road Corridor Resurfacing',
+            scope: 'pavement',
+            zone: 'Shivajinagar',
+            startedAtUtc: now.subtract(const Duration(days: 240)),
+            completedAtUtc: now.subtract(const Duration(days: 110)),
+            rating: (c.grade - 0.2).clamp(1.0, 5.0),
+            defectsAttributed: c.activeDefects,
+          ),
+        ],
+        defects: [
+          ContractorDefectRef(
+            reportId: 'report_04',
+            category: ReportCategory.roadCrack,
+            status: DefectStatus.assigned,
+            reportedAtUtc: now.subtract(const Duration(days: 2)),
+            severityWeight: 1.5,
+          ),
+        ],
+        scoreBreakdown: ScoreBreakdown(
+          quality: (c.grade + 0.1).clamp(1.0, 5.0),
+          timeliness: (c.grade - 0.1).clamp(1.0, 5.0),
+          safety: c.grade,
+          compliance: (c.grade + 0.2).clamp(1.0, 5.0),
         ),
-      ],
-    );
+        warranties: [
+          WarrantyState(
+            defectId: 'report_07',
+            warrantyExpiresAtUtc: now.add(const Duration(days: 355)),
+            recurrences: 0,
+            scorePenaltyApplied: 0.0,
+          ),
+        ],
+      );
+    }
 
     // 8 Seeded Defects around Pune (18.5204, 73.8567)
     final seeded = [
@@ -827,10 +877,69 @@ class MockInfrastructureApi implements InfrastructureApi {
       String contractorId) async {
     await Future.delayed(_simulatedLatency);
     final passport = _passports[contractorId];
-    if (passport == null) {
-      throw Exception('Contractor passport not found: $contractorId');
-    }
-    return passport;
+    if (passport != null) return passport;
+
+    // Check if contractor is in leaderboard
+    final inLeaderboard = _leaderboard.cast<ContractorSummary?>().firstWhere(
+          (c) => c?.contractorId == contractorId,
+          orElse: () => null,
+        );
+
+    final summary = inLeaderboard ??
+        ContractorSummary(
+          contractorId: contractorId,
+          companyName: contractorId.startsWith('ctr_')
+              ? contractorId.replaceAll('ctr_', '').replaceAll('_', ' ').toUpperCase()
+              : 'Apex Infra Projects Ltd',
+          grade: 4.7,
+          activeDefects: 2,
+          completedProjects: 35,
+          streakMonths: 9,
+          kycVerified: true,
+        );
+
+    final now = DateTime.now().toUtc();
+    final fallbackPassport = ContractorPassport(
+      summary: summary,
+      projects: [
+        ContractorProject(
+          projectId: 'prj_${contractorId}_01',
+          name: '${summary.companyName} Z-Bridge Structural Maintenance',
+          scope: 'bridge',
+          zone: 'Pune Central',
+          startedAtUtc: now.subtract(const Duration(days: 120)),
+          completedAtUtc: now.subtract(const Duration(days: 10)),
+          rating: summary.grade,
+          defectsAttributed: summary.activeDefects * 2,
+        ),
+      ],
+      defects: [
+        ContractorDefectRef(
+          reportId: 'report_04',
+          category: ReportCategory.roadCrack,
+          status: DefectStatus.assigned,
+          reportedAtUtc: now.subtract(const Duration(days: 2)),
+          severityWeight: 1.5,
+        ),
+      ],
+      scoreBreakdown: ScoreBreakdown(
+        quality: (summary.grade + 0.1).clamp(1.0, 5.0),
+        timeliness: (summary.grade - 0.1).clamp(1.0, 5.0),
+        safety: summary.grade,
+        compliance: (summary.grade + 0.2).clamp(1.0, 5.0),
+      ),
+      warranties: [
+        WarrantyState(
+          defectId: 'report_07',
+          warrantyExpiresAtUtc: now.add(const Duration(days: 355)),
+          recurrences: 0,
+          scorePenaltyApplied: 0.0,
+        ),
+      ],
+    );
+
+    _passports[contractorId] = fallbackPassport;
+    return fallbackPassport;
   }
 
   @override
@@ -857,8 +966,8 @@ class MockInfrastructureApi implements InfrastructureApi {
     int zoom,
   ) async {
     await Future.delayed(_simulatedLatency);
-    return const [
-      CoverageCell(
+    return [
+      const CoverageCell(
         x: 1204,
         y: 890,
         zoom: 14,
@@ -866,7 +975,7 @@ class MockInfrastructureApi implements InfrastructureApi {
         verifiedCount: 12,
         lastReportDaysAgo: 1,
       ),
-      CoverageCell(
+      const CoverageCell(
         x: 1205,
         y: 890,
         zoom: 14,
@@ -884,7 +993,7 @@ class MockInfrastructureApi implements InfrastructureApi {
     if (r == null) {
       return ResolutionMedia(
         reportId: reportId,
-        afterPhotoUrls: const [],
+        afterPhotoUrls: [],
         contractorNote: 'Resolution in progress',
         resolvedAtUtc: DateTime.now().toUtc(),
       );

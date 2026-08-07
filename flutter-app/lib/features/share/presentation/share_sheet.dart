@@ -19,9 +19,9 @@ class ShareSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF1E293B),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -31,23 +31,23 @@ class ShareSheet extends StatelessWidget {
             width: 48,
             height: 4,
             decoration: BoxDecoration(
-              color: const Color(0xFF334155),
+              color: Theme.of(context).dividerColor,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
           const SizedBox(height: 24),
-          const Text(
+          Text(
             'Report Resolved!',
             style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.bold,
-              color: Colors.white,
+              color: Theme.of(context).colorScheme.onSurface,
             ),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Share this civic improvement with your community.',
-            style: TextStyle(color: Color(0xFF94A3B8)),
+            style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color ?? const Color(0xFF94A3B8)),
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 24),
@@ -80,8 +80,12 @@ class ShareSheet extends StatelessWidget {
                   onPressed: () async {
                     final xFile =
                         XFile.fromData(pngBytes, mimeType: 'image/png');
-                    await Share.shareXFiles([xFile],
-                        text: 'Check out this civic improvement on CivicLens!');
+                    await SharePlus.instance.share(
+                      ShareParams(
+                        files: [xFile],
+                        text: 'Check out this civic improvement on CivicLens!',
+                      ),
+                    );
                   },
                   icon: const Icon(Icons.share_rounded),
                   label: const Text('Share'),

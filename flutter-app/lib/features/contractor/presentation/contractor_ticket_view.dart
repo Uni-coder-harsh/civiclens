@@ -53,10 +53,10 @@ class _ContractorActionSheetState
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF1E293B),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        boxShadow: [
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        boxShadow: const [
           BoxShadow(
             color: Colors.black26,
             blurRadius: 20,
@@ -73,7 +73,7 @@ class _ContractorActionSheetState
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: const Color(0xFF334155),
+                color: Theme.of(context).dividerColor,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -102,15 +102,15 @@ class _ContractorActionSheetState
                 ),
                 const Spacer(),
                 // Anonymity indicator
-                const Row(
+                Row(
                   children: [
                     Icon(Icons.shield_rounded,
-                        color: Color(0xFF64748B), size: 14),
-                    SizedBox(width: 4),
+                        color: Theme.of(context).textTheme.bodyMedium?.color ?? const Color(0xFF64748B), size: 14),
+                    const SizedBox(width: 4),
                     Text(
                       'Reported by: Citizen',
                       style: TextStyle(
-                        color: Color(0xFF64748B),
+                        color: Theme.of(context).textTheme.bodyMedium?.color ?? const Color(0xFF64748B),
                         fontFamily: 'Inter',
                         fontSize: 11,
                         fontStyle: FontStyle.italic,
@@ -122,11 +122,11 @@ class _ContractorActionSheetState
             ),
           ),
           if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
               child: LinearProgressIndicator(
-                color: Color(0xFFD97706),
-                backgroundColor: Color(0xFF334155),
+                color: const Color(0xFFD97706),
+                backgroundColor: Theme.of(context).dividerColor,
               ),
             ),
           Padding(
@@ -148,7 +148,7 @@ class _ContractorActionSheetState
                       child: _ActionBtn(
                         icon: Icons.add_a_photo_rounded,
                         label: 'Upload After-Photo',
-                        color: const Color(0xFF4F46E5),
+                        color: Theme.of(context).colorScheme.primary,
                         onTap: _isLoading ? null : _uploadAfterPhoto,
                       ),
                     ),
@@ -159,21 +159,21 @@ class _ContractorActionSheetState
                 TextField(
                   controller: _replyController,
                   maxLines: 2,
-                  style: const TextStyle(
-                      color: Colors.white, fontFamily: 'Inter', fontSize: 14),
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurface, fontFamily: 'Inter', fontSize: 14),
                   decoration: InputDecoration(
                     hintText: 'Add right of reply…',
                     hintStyle:
                         const TextStyle(color: Color(0xFF475569), fontSize: 13),
                     filled: true,
-                    fillColor: const Color(0xFF0F172A),
+                    fillColor: Theme.of(context).scaffoldBackgroundColor,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: Color(0xFF334155)),
+                      borderSide: BorderSide(color: Theme.of(context).dividerColor),
                     ),
                     enabledBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
-                      borderSide: const BorderSide(color: Color(0xFF334155)),
+                      borderSide: BorderSide(color: Theme.of(context).dividerColor),
                     ),
                     suffixIcon: IconButton(
                       icon: const Icon(Icons.send_rounded,
@@ -208,17 +208,17 @@ class _ContractorActionSheetState
         showDialog(
           context: context,
           builder: (_) => AlertDialog(
-            backgroundColor: const Color(0xFF1E293B),
-            title: const Text('Access Denied',
-                style: TextStyle(color: Colors.white, fontFamily: 'Inter')),
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            title: Text('Access Denied',
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontFamily: 'Inter')),
             content: Text(e.toString(),
-                style: const TextStyle(
-                    color: Color(0xFF94A3B8), fontFamily: 'Inter')),
+                style: TextStyle(
+                    color: Theme.of(context).textTheme.bodySmall?.color ?? const Color(0xFF94A3B8), fontFamily: 'Inter')),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('OK',
-                    style: TextStyle(color: Color(0xFF4F46E5))),
+                child: Text('OK',
+                    style: TextStyle(color: Theme.of(context).colorScheme.primary)),
               ),
             ],
           ),

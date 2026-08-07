@@ -141,7 +141,7 @@ class _DemoRoleSwitcher extends ConsumerWidget {
                       style: TextStyle(
                         color: session.role == role
                             ? Colors.white
-                            : const Color(0xFF94A3B8),
+                            : Theme.of(context).textTheme.bodySmall?.color ?? const Color(0xFF94A3B8),
                         fontFamily: 'Inter',
                         fontWeight: FontWeight.w600,
                         fontSize: 13,

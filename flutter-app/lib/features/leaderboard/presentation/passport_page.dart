@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../../../shared/contractor.dart';
 import '../application/leaderboard_controller.dart';
 
@@ -21,6 +22,13 @@ class ContractorPassportPage extends ConsumerWidget {
           onPressed: () => context.pop(),
         ),
         title: const Text('Contractor Passport'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.qr_code_2_rounded),
+            onPressed: () => _showShareSheet(context),
+            tooltip: 'Share Passport',
+          ),
+        ],
       ),
       body: asyncData.when(
         loading: () => const Center(child: CircularProgressIndicator()),
@@ -60,6 +68,63 @@ class ContractorPassportPage extends ConsumerWidget {
           );
         },
       ),
+    );
+  }
+
+  void _showShareSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        final url = 'https://civiclens.app/c/$contractorId';
+        return Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Share Passport',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  fontFamily: 'Inter',
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Scan this QR code to view the public accountability passport for this contractor.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Color(0xFF94A3B8)),
+              ),
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: QrImageView(
+                  data: url,
+                  version: QrVersions.auto,
+                  size: 200.0,
+                ),
+              ),
+              const SizedBox(height: 24),
+              SelectableText(
+                url,
+                style: const TextStyle(
+                  color: Color(0xFF818CF8),
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -222,7 +287,8 @@ class ContractorPassportPage extends ConsumerWidget {
           isExpired ? Icons.timer_off_rounded : Icons.timer_rounded,
           color: isExpired ? Colors.grey : Colors.orange,
         ),
-        title: Text('Defect #${warranty.defectId.substring(0, 8)}'),
+        title: Text(
+            'Defect #${warranty.defectId.length > 8 ? warranty.defectId.substring(0, 8) : warranty.defectId}'),
         subtitle: Text(isExpired
             ? 'Expired'
             : 'Expires in $daysLeft days - Penalty: ${warranty.scorePenaltyApplied}'),

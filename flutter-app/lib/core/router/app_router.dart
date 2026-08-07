@@ -35,6 +35,15 @@ import '../../features/witness/presentation/witness_confirm_page.dart';
 import '../../features/profile/presentation/profile_page.dart';
 import '../../features/leaderboard/presentation/leaderboard_page.dart';
 import '../../features/leaderboard/presentation/passport_page.dart';
+import '../../features/officer/presentation/triage_dashboard_page.dart';
+import '../../features/contractor/presentation/contractor_dashboard_page.dart';
+import '../../features/leaderboard/presentation/passport_search_page.dart';
+// Phase 2b
+import '../../features/bridge_check/presentation/bridge_check_instructions_page.dart';
+import '../../features/bridge_check/presentation/bridge_check_recording_page.dart';
+import '../../features/bridge_check/presentation/bridge_check_verdict_page.dart';
+import '../../features/drone_upload/presentation/drone_upload_page.dart' as drone;
+import '../../features/capture/presentation/sweep_mode_page.dart';
 import '../../shared/ticket.dart';
 
 /// Provider exposing the configured [GoRouter] instance.
@@ -52,15 +61,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // Allow splash to always load
       if (path == '/splash') return null;
 
-      // RBAC guards for officer routes
-      if (path.startsWith('/officer')) {
+      // RBAC guards for officer private portal routes
+      if (path.startsWith('/officer/')) {
         if (!session.isOfficer) {
           return '/home/map';
         }
       }
 
-      // RBAC guards for contractor routes
-      if (path.startsWith('/contractor')) {
+      // RBAC guards for contractor private portal routes (/contractor/dashboard, /contractor/claims, etc.)
+      // Note: /contractors, /contractor-search, /contractors/:id are public accountability records
+      if (path.startsWith('/contractor/')) {
         if (!session.isContractor) {
           return '/home/map';
         }
@@ -163,6 +173,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       // Officer routes (RBAC guarded via redirect)
       GoRoute(
+        path: '/officer/dashboard',
+        builder: (context, state) => const TriageDashboardPage(),
+      ),
+      GoRoute(
         path: '/officer/queue',
         builder: (context, state) => const OfficerQueuePage(),
       ),
@@ -175,6 +189,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
 
       // Contractor routes (RBAC guarded via redirect)
+      GoRoute(
+        path: '/contractor/dashboard',
+        builder: (context, state) => const ContractorDashboardPage(),
+      ),
       GoRoute(
         path: '/contractor/claims',
         builder: (context, state) => const ContractorClaimsPage(),
@@ -206,6 +224,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const LeaderboardPage(),
       ),
       GoRoute(
+        path: '/contractor-search',
+        builder: (context, state) => const PassportSearchPage(),
+      ),
+      GoRoute(
+        path: '/c/:contractorId',
+        builder: (context, state) {
+          final contractorId = state.pathParameters['contractorId']!;
+          return ContractorPassportPage(contractorId: contractorId);
+        },
+      ),
+      GoRoute(
         path: '/contractors/:contractorId',
         builder: (context, state) {
           final contractorId = state.pathParameters['contractorId']!;
@@ -213,14 +242,28 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         },
       ),
 
-      // Utilities
+      // Utilities — Phase 2b routes
       GoRoute(
         path: '/bridge-check',
-        builder: (context, state) => const BridgeCheckPage(),
+        builder: (context, state) => const BridgeCheckInstructionsPage(),
+        routes: [
+          GoRoute(
+            path: 'recording',
+            builder: (context, state) => const BridgeCheckRecordingPage(),
+          ),
+          GoRoute(
+            path: 'verdict',
+            builder: (context, state) => const BridgeCheckVerdictPage(),
+          ),
+        ],
       ),
       GoRoute(
         path: '/drone-upload',
-        builder: (context, state) => const DroneUploadPage(),
+        builder: (context, state) => const drone.DroneUploadPage(),
+      ),
+      GoRoute(
+        path: '/capture/sweep',
+        builder: (context, state) => const SweepModePage(),
       ),
     ],
   );
@@ -366,7 +409,7 @@ class _RoleChip extends StatelessWidget {
             fontFamily: 'Inter',
             fontSize: 12,
             fontWeight: FontWeight.w600,
-            color: isActive ? Colors.white : const Color(0xFF94A3B8),
+            color: isActive ? Colors.white : Theme.of(context).textTheme.bodySmall?.color ?? const Color(0xFF94A3B8),
           ),
         ),
       ),

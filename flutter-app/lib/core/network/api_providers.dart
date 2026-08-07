@@ -12,7 +12,9 @@ final dioProvider = Provider<Dio>((ref) {
 });
 
 final appDatabaseProvider = Provider<AppDatabase>((ref) {
-  return AppDatabase();
+  final db = AppDatabase();
+  ref.onDispose(db.close);
+  return db;
 });
 
 final apiClientProvider = Provider<InfrastructureApi>((ref) {

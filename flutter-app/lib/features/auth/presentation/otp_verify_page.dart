@@ -54,10 +54,10 @@ class _OtpVerifyPageState extends ConsumerState<OtpVerifyPage> {
     final otp = _otp;
     if (otp.length != 6) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: Color(0xFF1E293B),
+        SnackBar(
+          backgroundColor: const Color(0xFF1E293B),
           content:
-              Text('Enter all 6 digits', style: TextStyle(color: Colors.white)),
+              Text('Enter all 6 digits', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
         ),
       );
       return;
@@ -101,10 +101,10 @@ class _OtpVerifyPageState extends ConsumerState<OtpVerifyPage> {
     await ref.read(authControllerProvider.notifier).requestOtp(widget.phone);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: Color(0xFF1E293B),
+        SnackBar(
+          backgroundColor: const Color(0xFF1E293B),
           content: Text('OTP resent (Mock: 123456)',
-              style: TextStyle(color: Colors.white)),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
         ),
       );
     }
@@ -124,14 +124,14 @@ class _OtpVerifyPageState extends ConsumerState<OtpVerifyPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
           onPressed: () => context.pop(),
-          icon: const Icon(Icons.arrow_back_ios_new_rounded,
-              color: Colors.white, size: 20),
+          icon: Icon(Icons.arrow_back_ios_new_rounded,
+              color: Theme.of(context).colorScheme.onSurface, size: 20),
         ),
       ),
       body: SafeArea(
@@ -141,13 +141,13 @@ class _OtpVerifyPageState extends ConsumerState<OtpVerifyPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: 24),
-              const Text(
+              Text(
                 'Verify OTP',
                 style: TextStyle(
                   fontFamily: 'Inter',
                   fontSize: 28,
                   fontWeight: FontWeight.w800,
-                  color: Colors.white,
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
               const SizedBox(height: 8),
@@ -246,11 +246,11 @@ class _OtpVerifyPageState extends ConsumerState<OtpVerifyPage> {
                     elevation: 0,
                   ),
                   child: _isLoading
-                      ? const SizedBox(
+                      ? SizedBox(
                           width: 22,
                           height: 22,
                           child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
+                              strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),
                         )
                       : const Text(
                           'Verify & Continue',
@@ -295,11 +295,11 @@ class _OtpBox extends StatelessWidget {
         maxLength: 1,
         inputFormatters: [FilteringTextInputFormatter.digitsOnly],
         onChanged: onChanged,
-        style: const TextStyle(
+        style: TextStyle(
           fontFamily: 'Inter',
           fontSize: 20,
           fontWeight: FontWeight.w700,
-          color: Colors.white,
+          color: Theme.of(context).colorScheme.onSurface,
         ),
         decoration: InputDecoration(
           counterText: '',

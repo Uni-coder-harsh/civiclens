@@ -197,9 +197,9 @@ class _WitnessConfirmPageState extends ConsumerState<WitnessConfirmPage> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: Theme.of(context).colorScheme.surface,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
           onPressed: () => context.pop(),
@@ -227,16 +227,16 @@ class _WitnessConfirmPageState extends ConsumerState<WitnessConfirmPage> {
                         color: const Color(0xFF3B82F6).withOpacity(0.3),
                       ),
                     ),
-                    child: const Row(
+                    child: Row(
                       children: [
-                        Icon(Icons.visibility_rounded,
+                        const Icon(Icons.visibility_rounded,
                             color: Color(0xFF60A5FA), size: 24),
-                        SizedBox(width: 12),
+                        const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
+                              const Text(
                                 'WitnessMode Active',
                                 style: TextStyle(
                                   color: Color(0xFF60A5FA),
@@ -245,11 +245,11 @@ class _WitnessConfirmPageState extends ConsumerState<WitnessConfirmPage> {
                                   fontSize: 14,
                                 ),
                               ),
-                              SizedBox(height: 2),
+                              const SizedBox(height: 2),
                               Text(
                                 'Earn +5 Civic Score for confirming this report. You must be within 50m of the report location.',
                                 style: TextStyle(
-                                  color: Color(0xFF94A3B8),
+                                  color: Theme.of(context).textTheme.bodySmall?.color ?? const Color(0xFF94A3B8),
                                   fontFamily: 'Inter',
                                   fontSize: 12,
                                   height: 1.4,
@@ -326,12 +326,12 @@ class _WitnessConfirmPageState extends ConsumerState<WitnessConfirmPage> {
                             .read(_confirmNotifierProvider.notifier)
                             .submit(),
                     icon: state.isLoading
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 16,
                             height: 16,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              color: Colors.white,
+                              color: Theme.of(context).colorScheme.onSurface,
                             ),
                           )
                         : const Icon(Icons.check_circle_rounded),
@@ -370,9 +370,9 @@ class _ReportPreview extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF334155)),
+        border: Border.all(color: Theme.of(context).dividerColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -381,19 +381,19 @@ class _ReportPreview extends StatelessWidget {
           Container(
             height: 140,
             decoration: BoxDecoration(
-              color: const Color(0xFF334155),
+              color: Theme.of(context).dividerColor,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: const Center(
+            child: Center(
               child: Icon(Icons.broken_image_rounded,
-                  color: Color(0xFF64748B), size: 40),
+                  color: Theme.of(context).textTheme.bodyMedium?.color ?? const Color(0xFF64748B), size: 40),
             ),
           ),
           const SizedBox(height: 12),
           Text(
             _categoryLabel(defect.category),
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurface,
               fontFamily: 'Inter',
               fontWeight: FontWeight.w700,
               fontSize: 16,
@@ -402,8 +402,8 @@ class _ReportPreview extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             '${defect.latitude.toStringAsFixed(4)}°, ${defect.longitude.toStringAsFixed(4)}°',
-            style: const TextStyle(
-              color: Color(0xFF64748B),
+            style: TextStyle(
+              color: Theme.of(context).textTheme.bodyMedium?.color ?? const Color(0xFF64748B),
               fontFamily: 'Inter',
               fontSize: 12,
             ),
@@ -457,7 +457,7 @@ class _GpsRangeWidget extends StatelessWidget {
         ? const Color(0xFFDC2626)
         : hasGps
             ? const Color(0xFF22C55E)
-            : const Color(0xFF64748B);
+            : Theme.of(context).textTheme.bodyMedium?.color ?? Theme.of(context).textTheme.bodyMedium?.color ?? const Color(0xFF64748B);
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -507,7 +507,7 @@ class _SuccessScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Center(
         child: Padding(
           padding: const EdgeInsets.all(32),
@@ -532,10 +532,10 @@ class _SuccessScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 24),
-              const Text(
+              Text(
                 'Confirmation Submitted!',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: Theme.of(context).colorScheme.onSurface,
                   fontFamily: 'Inter',
                   fontSize: 24,
                   fontWeight: FontWeight.w800,
@@ -547,15 +547,15 @@ class _SuccessScreen extends StatelessWidget {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF4F46E5), Color(0xFF0D9488)],
+                  gradient: LinearGradient(
+                    colors: [Theme.of(context).colorScheme.primary, const Color(0xFF0D9488)],
                   ),
                   borderRadius: BorderRadius.circular(30),
                 ),
-                child: const Text(
+                child: Text(
                   '+5 Witness Civic Score',
                   style: TextStyle(
-                    color: Colors.white,
+                    color: Theme.of(context).colorScheme.onSurface,
                     fontFamily: 'Inter',
                     fontWeight: FontWeight.w800,
                     fontSize: 18,
@@ -563,10 +563,10 @@ class _SuccessScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
-              const Text(
+              Text(
                 'Thank you for helping verify civic infrastructure issues in your community.',
                 style: TextStyle(
-                  color: Color(0xFF94A3B8),
+                  color: Theme.of(context).textTheme.bodySmall?.color ?? const Color(0xFF94A3B8),
                   fontFamily: 'Inter',
                   fontSize: 14,
                   height: 1.5,
@@ -577,8 +577,8 @@ class _SuccessScreen extends StatelessWidget {
               ElevatedButton(
                 onPressed: onDone,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF1E293B),
-                  foregroundColor: Colors.white,
+                  backgroundColor: Theme.of(context).colorScheme.surface,
+                  foregroundColor: Theme.of(context).colorScheme.onSurface,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
                   shape: RoundedRectangleBorder(

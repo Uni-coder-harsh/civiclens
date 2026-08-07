@@ -18,9 +18,9 @@ class OfficerQueuePage extends ConsumerWidget {
     final queueAsync = ref.watch(officerQueueProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: Theme.of(context).colorScheme.surface,
         title: const Text('Officer Queue',
             style: TextStyle(fontFamily: 'Inter', fontWeight: FontWeight.w700)),
         actions: [
@@ -36,8 +36,8 @@ class OfficerQueuePage extends ConsumerWidget {
           _FilterChips(),
           Expanded(
             child: queueAsync.when(
-              loading: () => const Center(
-                child: CircularProgressIndicator(color: Color(0xFF4F46E5)),
+              loading: () => Center(
+                child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary),
               ),
               error: (e, _) {
                 if (e is ForbiddenException) {
@@ -48,7 +48,7 @@ class OfficerQueuePage extends ConsumerWidget {
                 }
                 return Center(
                   child: Text('Error: $e',
-                      style: const TextStyle(color: Color(0xFF94A3B8))),
+                      style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color ?? const Color(0xFF94A3B8))),
                 );
               },
               data: (tickets) {
@@ -56,14 +56,14 @@ class OfficerQueuePage extends ConsumerWidget {
                   return _EmptyQueue();
                 }
                 return RefreshIndicator(
-                  color: const Color(0xFF4F46E5),
+                  color: Theme.of(context).colorScheme.primary,
                   onRefresh: () =>
                       ref.read(officerQueueProvider.notifier).refresh(),
                   child: ListView.builder(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
                     itemCount: tickets.length,
                     itemBuilder: (context, i) =>
-                        _TicketCard(ticket: tickets[i]),
+                        OfficerTicketCard(ticket: tickets[i]),
                   ),
                 );
               },
@@ -88,7 +88,7 @@ class _FilterChips extends ConsumerWidget {
     ];
 
     return Container(
-      color: const Color(0xFF1E293B),
+      color: Theme.of(context).colorScheme.surface,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -130,9 +130,9 @@ class _FilterChip extends ConsumerWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          color: const Color(0xFF4F46E5).withOpacity(0.15),
+          color: Theme.of(context).colorScheme.primary.withOpacity(0.15),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: const Color(0xFF4F46E5).withOpacity(0.4)),
+          border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.4)),
         ),
         child: Text(
           label,
@@ -150,10 +150,10 @@ class _FilterChip extends ConsumerWidget {
 
 // ── Ticket Card ───────────────────────────────────────────────────────────────
 
-class _TicketCard extends StatelessWidget {
+class OfficerTicketCard extends StatelessWidget {
   final TicketSummary ticket;
 
-  const _TicketCard({required this.ticket});
+  const OfficerTicketCard({required this.ticket, super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -162,12 +162,12 @@ class _TicketCard extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: const Color(0xFF1E293B),
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: ticket.severity == ReportSeverity.critical
                 ? const Color(0xFFDC2626).withOpacity(0.4)
-                : const Color(0xFF334155),
+                : Theme.of(context).dividerColor,
           ),
         ),
         child: Padding(
@@ -201,8 +201,8 @@ class _TicketCard extends StatelessWidget {
                         Expanded(
                           child: Text(
                             _categoryLabel(ticket.category),
-                            style: const TextStyle(
-                              color: Colors.white,
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.onSurface,
                               fontFamily: 'Inter',
                               fontWeight: FontWeight.w700,
                               fontSize: 15,
@@ -215,13 +215,13 @@ class _TicketCard extends StatelessWidget {
                     const SizedBox(height: 4),
                     Row(
                       children: [
-                        const Icon(Icons.location_on_outlined,
-                            size: 12, color: Color(0xFF64748B)),
+                        Icon(Icons.location_on_outlined,
+                            size: 12, color: Theme.of(context).textTheme.bodyMedium?.color ?? const Color(0xFF64748B)),
                         const SizedBox(width: 3),
                         Text(
                           ticket.zone,
-                          style: const TextStyle(
-                            color: Color(0xFF64748B),
+                          style: TextStyle(
+                            color: Theme.of(context).textTheme.bodyMedium?.color ?? const Color(0xFF64748B),
                             fontFamily: 'Inter',
                             fontSize: 12,
                           ),
@@ -232,7 +232,7 @@ class _TicketCard extends StatelessWidget {
                           style: TextStyle(
                             color: ticket.daysInStatus > 7
                                 ? const Color(0xFFDC2626)
-                                : const Color(0xFF94A3B8),
+                                : Theme.of(context).textTheme.bodySmall?.color ?? Theme.of(context).textTheme.bodySmall?.color ?? const Color(0xFF94A3B8),
                             fontFamily: 'Inter',
                             fontSize: 12,
                           ),
@@ -263,8 +263,8 @@ class _TicketCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(Icons.chevron_right_rounded,
-                  color: Color(0xFF64748B), size: 20),
+              Icon(Icons.chevron_right_rounded,
+                  color: Theme.of(context).textTheme.bodyMedium?.color ?? const Color(0xFF64748B), size: 20),
             ],
           ),
         ),
@@ -457,21 +457,21 @@ class _VerifiedBadge extends StatelessWidget {
 class _EmptyQueue extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.done_all_rounded, color: Color(0xFF22C55E), size: 56),
-          SizedBox(height: 16),
+          const Icon(Icons.done_all_rounded, color: Color(0xFF22C55E), size: 56),
+          const SizedBox(height: 16),
           Text('Queue is clear!',
               style: TextStyle(
-                  color: Colors.white,
+                  color: Theme.of(context).colorScheme.onSurface,
                   fontFamily: 'Inter',
                   fontSize: 20,
                   fontWeight: FontWeight.w700)),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text('No tickets require your attention.',
-              style: TextStyle(color: Color(0xFF94A3B8), fontFamily: 'Inter')),
+              style: TextStyle(color: Theme.of(context).textTheme.bodySmall?.color ?? const Color(0xFF94A3B8), fontFamily: 'Inter')),
         ],
       ),
     );

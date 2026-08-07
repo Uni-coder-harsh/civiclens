@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../../core/network/api_providers.dart';
+import '../../../features/capture/data/capture_repository.dart';
 import '../../../shared/defect.dart';
 import '../../../shared/report_payload.dart';
 import '../application/sync_controller.dart';
@@ -138,31 +139,49 @@ class _ReportFormScreenState extends ConsumerState<ReportFormScreen> {
   final TextEditingController _descController = TextEditingController();
   bool _duplicatesChecked = false;
 
-  // Demo capture — in production comes from route extra
-  late final GeoCapture _capture;
+  late GeoCapture _capture;
+  String _imagePath = '';
 
   @override
-  void initState() {
-    super.initState();
-    // Placeholder geo data — in production, route extra provides this
-    _capture = GeoCapture(
-      latitude: 28.6139,
-      longitude: 77.2090,
-      altitudeMeters: 216,
-      accuracyMeters: 5,
-      bearingDegrees: 0,
-      speedMps: 0,
-      capturedAtUtc: DateTime.now().toUtc(),
-    );
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_duplicatesChecked) {
-        _duplicatesChecked = true;
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_duplicatesChecked) {
+      // Read CaptureResult from route extra if available
+      final extra = GoRouterState.of(context).extra;
+      if (extra is CaptureResult) {
+        // Passed directly from PreviewReviewPage
+        _capture = extra.geoCapture;
+        _imagePath = extra.watermarkedPath;
+      } else if (extra is Map<String, dynamic>) {
+        final captureJson = extra['capture'];
+        if (captureJson != null) {
+          _capture = GeoCapture.fromJson(captureJson as Map<String, dynamic>);
+        } else {
+          _capture = _fallbackCapture();
+        }
+        _imagePath = extra['imagePath'] as String? ?? '';
+      } else {
+        // Demo / fallback — Pune coords for mock data consistency
+        _capture = _fallbackCapture();
+      }
+      _duplicatesChecked = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
         ref
             .read(_reportFormProvider.notifier)
             .checkDuplicates(_capture.latitude, _capture.longitude);
-      }
-    });
+      });
+    }
   }
+
+  GeoCapture _fallbackCapture() => GeoCapture(
+        latitude: 18.5204,
+        longitude: 73.8567,
+        altitudeMeters: 558,
+        accuracyMeters: 5,
+        bearingDegrees: 0,
+        speedMps: 0,
+        capturedAtUtc: DateTime.now().toUtc(),
+      );
 
   @override
   void dispose() {
@@ -175,7 +194,7 @@ class _ReportFormScreenState extends ConsumerState<ReportFormScreen> {
     final formState = ref.watch(_reportFormProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: const Text('File Report'),
         backgroundColor: const Color(0xFF1E293B),
@@ -241,7 +260,7 @@ class _ReportFormScreenState extends ConsumerState<ReportFormScreen> {
               controller: _descController,
               maxLength: 500,
               maxLines: 5,
-              style: const TextStyle(color: Colors.white, fontFamily: 'Inter'),
+              style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontFamily: 'Inter'),
               decoration: InputDecoration(
                 hintText: 'Describe the defect clearly…',
                 hintStyle: const TextStyle(color: Color(0xFF475569)),
@@ -305,11 +324,11 @@ class _ReportFormScreenState extends ConsumerState<ReportFormScreen> {
                     borderRadius: BorderRadius.circular(14)),
               ),
               child: formState.isSubmitting
-                  ? const SizedBox(
+                  ? SizedBox(
                       height: 20,
                       width: 20,
                       child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
+                          strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),
                     )
                   : const Text('Submit Report',
                       style: TextStyle(
@@ -327,7 +346,7 @@ class _ReportFormScreenState extends ConsumerState<ReportFormScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFF334155)),
       ),
@@ -350,11 +369,11 @@ class _ReportFormScreenState extends ConsumerState<ReportFormScreen> {
   Future<void> _submit() async {
     final draftId = await ref.read(_reportFormProvider.notifier).submitDraft(
           capture: _capture,
-          imagePath: '/tmp/placeholder.jpg',
+          imagePath: _imagePath.isEmpty ? 'mock://placeholder' : _imagePath,
           userId: 'demo-user',
         );
     if (draftId != null && mounted) {
-      context.go('/report/$draftId');
+      context.go('/home/activity');
     }
   }
 
@@ -435,7 +454,7 @@ class _CategoryDropdown extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFF334155)),
       ),
@@ -462,8 +481,8 @@ class _CategoryDropdown extends StatelessWidget {
                   value: c,
                   child: Text(
                     _categoryLabel(c),
-                    style: const TextStyle(
-                        color: Colors.white, fontFamily: 'Inter', fontSize: 15),
+                    style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface, fontFamily: 'Inter', fontSize: 15),
                   ),
                 ),
               )
@@ -531,14 +550,14 @@ class _SeveritySelector extends StatelessWidget {
                             size: 18,
                             color: current == s
                                 ? Colors.white
-                                : const Color(0xFF64748B)),
+                                : Theme.of(context).textTheme.bodyMedium?.color ?? const Color(0xFF64748B)),
                         const SizedBox(height: 4),
                         Text(
                           _severityLabel(s),
                           style: TextStyle(
                             color: current == s
                                 ? Colors.white
-                                : const Color(0xFF64748B),
+                                : Theme.of(context).textTheme.bodyMedium?.color ?? const Color(0xFF64748B),
                             fontFamily: 'Inter',
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
@@ -608,7 +627,7 @@ class _DuplicateWarningCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: const Color(0xFFF59E0B).withOpacity(0.5)),
       ),
@@ -663,8 +682,8 @@ class _DuplicateWarningCard extends StatelessWidget {
                           RegExp(r'([A-Z])'),
                           (m) => ' ${m.group(1)}',
                         ),
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurface,
                           fontFamily: 'Inter',
                           fontWeight: FontWeight.w600,
                         ),
@@ -746,7 +765,7 @@ class _CollapsibleGuidePanel extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
-              color: const Color(0xFF1E293B),
+              color: Theme.of(context).colorScheme.surface,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: const Color(0xFF334155)),
             ),
@@ -766,7 +785,7 @@ class _CollapsibleGuidePanel extends StatelessWidget {
                   expanded
                       ? Icons.keyboard_arrow_up_rounded
                       : Icons.keyboard_arrow_down_rounded,
-                  color: const Color(0xFF64748B),
+                  color: Theme.of(context).textTheme.bodyMedium?.color ?? const Color(0xFF64748B),
                 ),
               ],
             ),
@@ -777,7 +796,7 @@ class _CollapsibleGuidePanel extends StatelessWidget {
             margin: const EdgeInsets.only(top: 4),
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFF1E293B).withOpacity(0.6),
+              color: Theme.of(context).colorScheme.surface.withOpacity(0.6),
               borderRadius: BorderRadius.circular(10),
               border: Border.all(color: const Color(0xFF334155)),
             ),

@@ -41,21 +41,21 @@ class PermissionService {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: Theme.of(context).colorScheme.surface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text(
+        title: Text(
           'Permissions Required',
           style: TextStyle(
-            color: Colors.white,
+            color: Theme.of(context).colorScheme.onSurface,
             fontFamily: 'Inter',
             fontWeight: FontWeight.w700,
           ),
         ),
-        content: const Text(
+        content: Text(
           'CivicLens needs Camera and Location access to capture provable reports.\n\n'
           'Please enable these permissions in your device settings.',
           style: TextStyle(
-            color: Color(0xFF94A3B8),
+            color: Theme.of(context).textTheme.bodySmall?.color ?? const Color(0xFF94A3B8),
             fontFamily: 'Inter',
             height: 1.5,
           ),
@@ -63,9 +63,9 @@ class PermissionService {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text(
+            child: Text(
               'Cancel',
-              style: TextStyle(color: Color(0xFF64748B), fontFamily: 'Inter'),
+              style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color ?? const Color(0xFF64748B), fontFamily: 'Inter'),
             ),
           ),
           ElevatedButton(
@@ -74,7 +74,7 @@ class PermissionService {
               AppSettings.openAppSettings();
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF4F46E5),
+              backgroundColor: Theme.of(context).colorScheme.primary,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10)),
             ),

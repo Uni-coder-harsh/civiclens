@@ -47,10 +47,10 @@ class _OfficerTicketActionSheetState
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF1E293B),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        boxShadow: [
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+        boxShadow: const [
           BoxShadow(
             color: Colors.black26,
             blurRadius: 20,
@@ -67,7 +67,7 @@ class _OfficerTicketActionSheetState
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: const Color(0xFF334155),
+                color: Theme.of(context).dividerColor,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
@@ -80,7 +80,7 @@ class _OfficerTicketActionSheetState
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF4F46E5).withOpacity(0.15),
+                    color: Theme.of(context).colorScheme.primary.withOpacity(0.15),
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Text(
@@ -98,11 +98,11 @@ class _OfficerTicketActionSheetState
             ),
           ),
           if (_isLoading)
-            const Padding(
-              padding: EdgeInsets.all(16),
+            Padding(
+              padding: const EdgeInsets.all(16),
               child: LinearProgressIndicator(
-                color: Color(0xFF4F46E5),
-                backgroundColor: Color(0xFF334155),
+                color: Theme.of(context).colorScheme.primary,
+                backgroundColor: Theme.of(context).dividerColor,
               ),
             ),
           Padding(
@@ -124,7 +124,7 @@ class _OfficerTicketActionSheetState
                       child: _ActionButton(
                         icon: Icons.photo_library_rounded,
                         label: 'Verify from Photos',
-                        color: const Color(0xFF4F46E5),
+                        color: Theme.of(context).colorScheme.primary,
                         onTap: _isLoading ? null : _verifyFromPhotos,
                       ),
                     ),
@@ -185,17 +185,17 @@ class _OfficerTicketActionSheetState
         showDialog(
           context: context,
           builder: (_) => AlertDialog(
-            backgroundColor: const Color(0xFF1E293B),
-            title: const Text('Access Denied',
-                style: TextStyle(color: Colors.white, fontFamily: 'Inter')),
+            backgroundColor: Theme.of(context).colorScheme.surface,
+            title: Text('Access Denied',
+                style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontFamily: 'Inter')),
             content: Text(e.toString(),
-                style: const TextStyle(
-                    color: Color(0xFF94A3B8), fontFamily: 'Inter')),
+                style: TextStyle(
+                    color: Theme.of(context).textTheme.bodySmall?.color ?? const Color(0xFF94A3B8), fontFamily: 'Inter')),
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('OK',
-                    style: TextStyle(color: Color(0xFF4F46E5))),
+                child: Text('OK',
+                    style: TextStyle(color: Theme.of(context).colorScheme.primary)),
               ),
             ],
           ),
@@ -275,24 +275,24 @@ class _AssignContractorDialogState extends State<_AssignContractorDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: const Color(0xFF1E293B),
-      title: const Text('Assign Contractor',
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      title: Text('Assign Contractor',
           style: TextStyle(
-              color: Colors.white,
+              color: Theme.of(context).colorScheme.onSurface,
               fontFamily: 'Inter',
               fontWeight: FontWeight.w700)),
       content: TextField(
         controller: _controller,
-        style: const TextStyle(color: Colors.white, fontFamily: 'Inter'),
+        style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontFamily: 'Inter'),
         decoration: InputDecoration(
           hintText: 'Enter contractor ID…',
           hintStyle: const TextStyle(color: Color(0xFF475569)),
           filled: true,
-          fillColor: const Color(0xFF0F172A),
+          fillColor: Theme.of(context).scaffoldBackgroundColor,
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFF334155)),
+            borderSide: BorderSide(color: Theme.of(context).dividerColor),
           ),
         ),
       ),
@@ -300,12 +300,12 @@ class _AssignContractorDialogState extends State<_AssignContractorDialog> {
         TextButton(
           onPressed: () => Navigator.pop(context),
           child:
-              const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
+              Text('Cancel', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color ?? const Color(0xFF64748B))),
         ),
         ElevatedButton(
           onPressed: () => Navigator.pop(context, _controller.text.trim()),
           style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF4F46E5)),
+              backgroundColor: Theme.of(context).colorScheme.primary),
           child: const Text('Assign'),
         ),
       ],
@@ -324,25 +324,25 @@ class _RejectDialogState extends State<_RejectDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      backgroundColor: const Color(0xFF1E293B),
-      title: const Text('Reject Report',
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      title: Text('Reject Report',
           style: TextStyle(
-              color: Colors.white,
+              color: Theme.of(context).colorScheme.onSurface,
               fontFamily: 'Inter',
               fontWeight: FontWeight.w700)),
       content: TextField(
         controller: _controller,
         maxLines: 3,
-        style: const TextStyle(color: Colors.white, fontFamily: 'Inter'),
+        style: TextStyle(color: Theme.of(context).colorScheme.onSurface, fontFamily: 'Inter'),
         decoration: InputDecoration(
           hintText: 'Enter rejection reason (required)…',
           hintStyle: const TextStyle(color: Color(0xFF475569)),
           filled: true,
-          fillColor: const Color(0xFF0F172A),
+          fillColor: Theme.of(context).scaffoldBackgroundColor,
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Color(0xFF334155)),
+            borderSide: BorderSide(color: Theme.of(context).dividerColor),
           ),
         ),
       ),
@@ -350,7 +350,7 @@ class _RejectDialogState extends State<_RejectDialog> {
         TextButton(
           onPressed: () => Navigator.pop(context),
           child:
-              const Text('Cancel', style: TextStyle(color: Color(0xFF64748B))),
+              Text('Cancel', style: TextStyle(color: Theme.of(context).textTheme.bodyMedium?.color ?? const Color(0xFF64748B))),
         ),
         ElevatedButton(
           onPressed: () => Navigator.pop(context, _controller.text.trim()),
