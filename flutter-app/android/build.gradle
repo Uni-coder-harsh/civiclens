@@ -1,0 +1,40 @@
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+subprojects { subproject ->
+    if (subproject.name != 'app') {
+        subproject.ext.flutter = [
+            compileSdkVersion: 35,
+            minSdkVersion: 24,
+            targetSdkVersion: 35,
+            ndkVersion: "25.1.8937393"
+        ]
+    }
+    afterEvaluate {
+        if (subproject.hasProperty('android')) {
+            subproject.android {
+                if (namespace == null) {
+                    namespace subproject.group
+                }
+                compileSdkVersion 35
+                ndkVersion "25.1.8937393"
+            }
+        }
+    }
+}
+
+rootProject.buildDir = "../build"
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+subprojects {
+    project.evaluationDependsOn(":app")
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
+}
