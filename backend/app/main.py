@@ -22,6 +22,7 @@ from app.modules.ai.router import router as ai_router
 from app.modules.severity.router import router as severity_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.analytics.router import router as analytics_router
+from app.modules.integration.router import router as integration_router
 
 # Import ORM models so SQLAlchemy metadata and string relationships are registered.
 from app.modules.auth import model as auth_models  # noqa: F401
@@ -96,6 +97,7 @@ app.include_router(ai_router, prefix=api_prefix)
 app.include_router(severity_router, prefix=api_prefix)
 app.include_router(notifications_router, prefix=api_prefix)
 app.include_router(analytics_router, prefix=api_prefix)
+app.include_router(integration_router)
 
 @app.get("/", include_in_schema=False)
 async def root_redirect():
