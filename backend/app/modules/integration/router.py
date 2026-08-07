@@ -804,14 +804,23 @@ async def auth_guest():
 
 @router.post("/auth/otp/send")
 async def auth_otp_send(body: OTPSendRequest):
-    return {"message": "Verification code dispatched if account exists."}
+    import random
+    from app.core.logging import logger
+    otp_code = f"{random.randint(100000, 999999)}"
+    store.otps[body.phone] = otp_code
+    logger.info(f"🔑 [OTP DISPATCH] Dynamic verification code for phone {body.phone} is: {otp_code}")
+    return {"message": "Verification code dispatched successfully."}
 
 @router.post("/auth/otp/verify", response_model=AuthSessionResponseSchema)
 async def auth_otp_verify(body: OTPVerifyRequest):
-    if body.otp != "123456":
-        raise HTTPException(status_code=400, detail="Invalid OTP code. Use 123456 for testing.")
-    
     phone = body.phone
+    expected_otp = store.otps.get(phone)
+    if body.otp != expected_otp and body.otp != "123456":
+        raise HTTPException(
+            status_code=400, 
+            detail="Invalid OTP code. Please check backend server logs for the dynamic OTP or use 123456 as fallback."
+        )
+    
     if phone.endswith("9999") or phone == "+919876543210":
         role = "officer"
         display_name = "Officer Sharma - Ward 4 Engineer"

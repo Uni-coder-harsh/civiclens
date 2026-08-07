@@ -15,6 +15,7 @@ class IntegrationStore:
         self.replies = {}
         self.passports = {}
         self.leaderboard = []
+        self.otps = {}
         self.load()
 
     def load(self):
