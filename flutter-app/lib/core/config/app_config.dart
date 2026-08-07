@@ -1,10 +1,20 @@
 enum AuthBackend { mock, firebase }
 
 abstract class AppConfig {
-  static const AuthBackend authBackend = AuthBackend.mock;
-  static const bool useMockApi = true;
+      static const AuthBackend authBackend = AuthBackend.mock;
+      
+
+      static const bool useMockApi = false;
   static const bool isDemoBuild = true; // Set false for production builds
-  static const String apiBaseUrl = 'https://api.civiclens.gov.in';
+  
+  // Set to true for local development, false to use your deployed Railway backend
+  static const bool useLocalBackend = true;
+  
+  // Base URLs for environments (change local to 'http://10.0.2.2:8000' if using Android Emulator)
+  static const String localApiBaseUrl = 'http://localhost:8000';
+  static const String remoteApiBaseUrl = 'https://civiclens-backend.up.railway.app'; // Replace with your Railway domain
+  
+  static String get apiBaseUrl => useLocalBackend ? localApiBaseUrl : remoteApiBaseUrl;
   static const String appName = 'CivicLens';
   static const String appVersion = '1.0.0';
-}
+    }
