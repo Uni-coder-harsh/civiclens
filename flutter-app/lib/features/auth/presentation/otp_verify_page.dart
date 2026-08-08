@@ -135,7 +135,7 @@ class _OtpVerifyPageState extends ConsumerState<OtpVerifyPage> {
         ),
       ),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -229,7 +229,7 @@ class _OtpVerifyPageState extends ConsumerState<OtpVerifyPage> {
                   ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(height: 48),
               SizedBox(
                 width: double.infinity,
                 height: 56,

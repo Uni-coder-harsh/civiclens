@@ -3,6 +3,8 @@ import math
 import json
 import io
 import datetime
+import random
+import hashlib
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
 from fastapi import APIRouter, Query, status, HTTPException, Depends, Request, Form, File, UploadFile
@@ -1164,7 +1166,7 @@ async def send_resend_email(to_email: str, subject: str, html_body: str) -> bool
                 "subject": subject,
                 "html": html_body
             }
-            async with httpx.AsyncClient() as client:
+            async with httpx.AsyncClient(timeout=30.0) as client:
                 resp = await client.post("https://api.resend.com/emails", json=payload, headers=headers)
                 if resp.status_code >= 400:
                     logger.error(f"Resend email dispatch failed ({resp.status_code}): {resp.text}")

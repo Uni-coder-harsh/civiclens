@@ -148,6 +148,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                 urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
                 userAgentPackageName: 'com.civiclens.app',
                 subdomains: const ['a', 'b', 'c', 'd'],
+                retinaMode: RetinaMode.isHighDensity(context),
               ),
               MarkerLayer(
                 markers: _buildMarkers(mapState.defects),
@@ -160,10 +161,13 @@ class _MapPageState extends ConsumerState<MapPage> {
             top: MediaQuery.of(context).padding.top + 12,
             left: 16,
             right: 16,
-            child: Row(
-              children: [
-                // Map title & status pill
-                Container(
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              physics: const BouncingScrollPhysics(),
+              child: Row(
+                children: [
+                  // Map title & status pill
+                  Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
@@ -218,7 +222,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                   ),
                 ),
 
-                const Spacer(),
+                  const SizedBox(width: 8),
 
                 // Role action shortcut badge
                 const _RoleActionPill(),
@@ -272,6 +276,7 @@ class _MapPageState extends ConsumerState<MapPage> {
               ],
             ),
           ),
+        ),
 
           // Coverage heatmap stub overlay
           if (mapState.showCoverage)

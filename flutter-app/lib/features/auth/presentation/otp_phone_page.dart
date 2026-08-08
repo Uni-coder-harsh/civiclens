@@ -64,7 +64,7 @@ class _OtpPhonePageState extends ConsumerState<OtpPhonePage> {
         ),
       ),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24),
           child: Form(
             key: _formKey,
@@ -189,7 +189,7 @@ class _OtpPhonePageState extends ConsumerState<OtpPhonePage> {
                     ],
                   ),
                 ),
-                const Spacer(),
+                const SizedBox(height: 48),
                 SizedBox(
                   width: double.infinity,
                   height: 56,
