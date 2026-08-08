@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
@@ -15,6 +16,8 @@ class _SplashPageState extends State<SplashPage>
   late Animation<double> _glowAnimation;
   late Animation<double> _scaleAnimation;
 
+  Timer? _timer;
+
   @override
   void initState() {
     super.initState();
@@ -31,7 +34,7 @@ class _SplashPageState extends State<SplashPage>
     );
 
     // Auto-navigate after 3 seconds — router redirect handles auth check
-    Future.delayed(const Duration(seconds: 3), () {
+    _timer = Timer(const Duration(seconds: 3), () {
       if (mounted) {
         context.go('/entry');
       }
@@ -40,6 +43,7 @@ class _SplashPageState extends State<SplashPage>
 
   @override
   void dispose() {
+    _timer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -47,7 +51,7 @@ class _SplashPageState extends State<SplashPage>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -64,7 +68,7 @@ class _SplashPageState extends State<SplashPage>
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF4F46E5)
+                          color: Theme.of(context).colorScheme.primary
                               .withOpacity(_glowAnimation.value * 0.8),
                           blurRadius: 40,
                           spreadRadius: 10,
@@ -78,20 +82,20 @@ class _SplashPageState extends State<SplashPage>
                       ],
                     ),
                     child: Container(
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         gradient: LinearGradient(
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                           colors: [
-                            Color(0xFF4F46E5),
-                            Color(0xFF0D9488),
+                            Theme.of(context).colorScheme.primary,
+                            const Color(0xFF0D9488),
                           ],
                         ),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.lens_blur_rounded,
-                        color: Colors.white,
+                        color: Theme.of(context).colorScheme.onSurface,
                         size: 56,
                       ),
                     ),
@@ -100,34 +104,34 @@ class _SplashPageState extends State<SplashPage>
               },
             ),
             const SizedBox(height: 32),
-            const Text(
+            Text(
               'CivicLens',
               style: TextStyle(
                 fontFamily: 'Inter',
                 fontSize: 36,
                 fontWeight: FontWeight.w800,
-                color: Colors.white,
+                color: Theme.of(context).colorScheme.onSurface,
                 letterSpacing: -0.5,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Provable Civic Infrastructure',
               style: TextStyle(
                 fontFamily: 'Inter',
                 fontSize: 14,
                 fontWeight: FontWeight.w400,
-                color: Color(0xFF94A3B8),
+                color: Theme.of(context).textTheme.bodySmall?.color ?? const Color(0xFF94A3B8),
                 letterSpacing: 0.5,
               ),
             ),
             const SizedBox(height: 60),
-            const SizedBox(
+            SizedBox(
               width: 24,
               height: 24,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                color: Color(0xFF4F46E5),
+                color: Theme.of(context).colorScheme.primary,
               ),
             ),
           ],

@@ -20,7 +20,7 @@ class ContractorClaimsPage extends ConsumerWidget {
     final claimsAsync = ref.watch(claimsProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         backgroundColor: const Color(0xFF1E293B),
         title: const Text('My Claims',
@@ -59,7 +59,7 @@ class ContractorClaimsPage extends ConsumerWidget {
             child: ListView.builder(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
               itemCount: claims.length,
-              itemBuilder: (context, i) => _ClaimCard(ticket: claims[i]),
+              itemBuilder: (context, i) => ContractorClaimCard(ticket: claims[i]),
             ),
           );
         },
@@ -70,10 +70,10 @@ class ContractorClaimsPage extends ConsumerWidget {
 
 // ── Claim Card ────────────────────────────────────────────────────────────────
 
-class _ClaimCard extends StatelessWidget {
+class ContractorClaimCard extends StatelessWidget {
   final TicketSummary ticket;
 
-  const _ClaimCard({required this.ticket});
+  const ContractorClaimCard({required this.ticket, super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -85,7 +85,7 @@ class _ClaimCard extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: 12),
         decoration: BoxDecoration(
-          color: const Color(0xFF1E293B),
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
             color: slaColor.withOpacity(0.4),
@@ -138,8 +138,8 @@ class _ClaimCard extends StatelessWidget {
                             Expanded(
                               child: Text(
                                 _categoryLabel(ticket.category),
-                                style: const TextStyle(
-                                  color: Colors.white,
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.onSurface,
                                   fontFamily: 'Inter',
                                   fontWeight: FontWeight.w700,
                                   fontSize: 15,
@@ -218,7 +218,9 @@ class _ClaimCard extends StatelessWidget {
   }
 
   Color _slaColor(SlaClock? sla) {
-    if (sla == null) return const Color(0xFF64748B);
+    if (sla == null) {
+      return const Color(0xFF64748B);
+    }
     if (sla.daysRemaining <= 2) return const Color(0xFFDC2626); // red
     if (sla.daysRemaining <= 7) return const Color(0xFFF59E0B); // orange
     return const Color(0xFF22C55E); // green
@@ -257,20 +259,20 @@ class _ClaimCard extends StatelessWidget {
 class _EmptyClaims extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.inbox_rounded, color: Color(0xFF4F46E5), size: 56),
-          SizedBox(height: 16),
+          const Icon(Icons.inbox_rounded, color: Color(0xFF4F46E5), size: 56),
+          const SizedBox(height: 16),
           Text('No active claims',
               style: TextStyle(
-                  color: Colors.white,
+                  color: Theme.of(context).colorScheme.onSurface,
                   fontFamily: 'Inter',
                   fontSize: 20,
                   fontWeight: FontWeight.w700)),
-          SizedBox(height: 8),
-          Text('Browse the map to find and claim tickets.',
+          const SizedBox(height: 8),
+          const Text('Browse the map to find and claim tickets.',
               style: TextStyle(color: Color(0xFF94A3B8), fontFamily: 'Inter')),
         ],
       ),

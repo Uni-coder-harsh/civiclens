@@ -80,7 +80,7 @@ class ReportDetailPage extends ConsumerWidget {
     final detailAsync = ref.watch(_reportDetailProvider(reportId));
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         backgroundColor: const Color(0xFF1E293B),
         leading: IconButton(
@@ -330,8 +330,8 @@ class _AiVerdictCard extends StatelessWidget {
                   children: [
                     Text(
                       '$confidence% Confidence',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurface,
                         fontFamily: 'Inter',
                         fontWeight: FontWeight.w700,
                         fontSize: 16,
@@ -365,7 +365,7 @@ class _WatermarkBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(
           color: watermarkVerified
@@ -381,7 +381,7 @@ class _WatermarkBadge extends StatelessWidget {
                 : Icons.help_outline_rounded,
             color: watermarkVerified
                 ? const Color(0xFF22C55E)
-                : const Color(0xFF64748B),
+                : Theme.of(context).textTheme.bodyMedium?.color ?? const Color(0xFF64748B),
             size: 20,
           ),
           const SizedBox(width: 12),
@@ -396,7 +396,7 @@ class _WatermarkBadge extends StatelessWidget {
                   style: TextStyle(
                     color: watermarkVerified
                         ? const Color(0xFF22C55E)
-                        : const Color(0xFF94A3B8),
+                        : Theme.of(context).textTheme.bodySmall?.color ?? const Color(0xFF94A3B8),
                     fontFamily: 'Inter',
                     fontWeight: FontWeight.w600,
                     fontSize: 14,
@@ -568,8 +568,8 @@ class _AuditTimeline extends StatelessWidget {
                               Expanded(
                                 child: Text(
                                   _actionLabel(event.action),
-                                  style: const TextStyle(
-                                    color: Colors.white,
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.onSurface,
                                     fontFamily: 'Inter',
                                     fontWeight: FontWeight.w600,
                                     fontSize: 14,
@@ -682,7 +682,7 @@ class _ResolutionComparison extends StatelessWidget {
                   Container(
                     height: 120,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
+                      color: Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: const Color(0xFF334155)),
                     ),
@@ -711,7 +711,7 @@ class _ResolutionComparison extends StatelessWidget {
                   Container(
                     height: 120,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF1E293B),
+                      color: Theme.of(context).colorScheme.surface,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
                           color: const Color(0xFF22C55E).withOpacity(0.4)),

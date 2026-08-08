@@ -13,22 +13,33 @@ class CivicLensApp extends ConsumerWidget {
     final router = ref.watch(appRouterProvider);
     final themeMode = ref.watch(appThemeModeProvider);
 
-    ThemeData getTheme() {
+    ThemeMode getThemeMode() {
       switch (themeMode) {
         case AppThemeMode.light:
-          return AppTheme.light;
+          return ThemeMode.light;
         case AppThemeMode.dark:
-          return AppTheme.dark;
         case AppThemeMode.field:
-          return AppTheme.field;
+          return ThemeMode.dark;
+        case AppThemeMode.system:
+        default:
+          return ThemeMode.system;
       }
+    }
+
+    ThemeData? getDarkTheme() {
+      if (themeMode == AppThemeMode.field) {
+        return AppTheme.field;
+      }
+      return AppTheme.dark;
     }
 
     return MaterialApp.router(
       title: 'CivicLens',
       debugShowCheckedModeBanner: false,
       routerConfig: router,
-      theme: getTheme(),
+      theme: AppTheme.light,
+      darkTheme: getDarkTheme(),
+      themeMode: getThemeMode(),
     );
   }
 }

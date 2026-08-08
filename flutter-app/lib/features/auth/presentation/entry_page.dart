@@ -10,7 +10,7 @@ class EntryPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
@@ -30,17 +30,17 @@ class EntryPage extends ConsumerWidget {
                     colors: [Color(0xFF4F46E5), Color(0xFF0D9488)],
                   ),
                 ),
-                child: const Icon(Icons.lens_blur_rounded,
-                    color: Colors.white, size: 40),
+                child: Icon(Icons.lens_blur_rounded,
+                    color: Theme.of(context).colorScheme.onSurface, size: 40),
               ),
               const SizedBox(height: 24),
-              const Text(
+              Text(
                 'CivicLens',
                 style: TextStyle(
                   fontFamily: 'Inter',
                   fontSize: 32,
                   fontWeight: FontWeight.w800,
-                  color: Colors.white,
+                  color: Theme.of(context).colorScheme.onSurface,
                   letterSpacing: -0.5,
                 ),
               ),
@@ -124,7 +124,7 @@ class EntryPage extends ConsumerWidget {
                     ),
                   ),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF94A3B8),
+                    foregroundColor: Theme.of(context).textTheme.bodySmall?.color ?? const Color(0xFF94A3B8),
                     side: const BorderSide(color: Color(0xFF334155)),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
@@ -168,7 +168,7 @@ class _FeatureCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: const Color(0xFF334155), width: 1),
       ),
@@ -190,11 +190,11 @@ class _FeatureCard extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontFamily: 'Inter',
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                    color: Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
                 const SizedBox(height: 2),

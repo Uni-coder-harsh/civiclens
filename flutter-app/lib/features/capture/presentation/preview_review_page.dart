@@ -40,12 +40,12 @@ class PreviewReviewPage extends StatelessWidget {
         elevation: 0,
         leading: IconButton(
           onPressed: () => context.pop(),
-          icon: const Icon(Icons.close_rounded, color: Colors.white, size: 24),
+          icon: Icon(Icons.close_rounded, color: Theme.of(context).colorScheme.onSurface, size: 24),
         ),
-        title: const Text(
+        title: Text(
           'Review Photo',
           style: TextStyle(
-            color: Colors.white,
+            color: Theme.of(context).colorScheme.onSurface,
             fontFamily: 'Inter',
             fontWeight: FontWeight.w700,
             fontSize: 16,
@@ -74,8 +74,8 @@ class PreviewReviewPage extends StatelessWidget {
                         Text(
                           'Could not load image\n${captureResult.watermarkedPath}',
                           textAlign: TextAlign.center,
-                          style: const TextStyle(
-                              color: Color(0xFF64748B), fontSize: 12),
+                          style: TextStyle(
+                              color: Theme.of(context).textTheme.bodyMedium?.color ?? const Color(0xFF64748B), fontSize: 12),
                         ),
                       ],
                     ),
@@ -106,9 +106,9 @@ class PreviewReviewPage extends StatelessWidget {
     required String qualityLabel,
   }) {
     return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF0F172A),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      decoration: BoxDecoration(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: EdgeInsets.only(
         left: 20,
@@ -125,17 +125,17 @@ class PreviewReviewPage extends StatelessWidget {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: const Color(0xFF334155),
+                color: Theme.of(context).dividerColor,
                 borderRadius: BorderRadius.circular(2),
               ),
             ),
           ),
           const SizedBox(height: 20),
 
-          const Text(
+          Text(
             'Capture Metadata',
             style: TextStyle(
-              color: Colors.white,
+              color: Theme.of(context).colorScheme.onSurface,
               fontFamily: 'Inter',
               fontSize: 14,
               fontWeight: FontWeight.w700,
@@ -151,7 +151,7 @@ class PreviewReviewPage extends StatelessWidget {
               _MetaChip(
                 icon: Icons.location_on_rounded,
                 label: coordLabel,
-                color: const Color(0xFF4F46E5),
+                color: Theme.of(context).colorScheme.primary,
               ),
               _MetaChip(
                 icon: Icons.access_time_rounded,
@@ -187,8 +187,8 @@ class PreviewReviewPage extends StatelessWidget {
                         fontFamily: 'Inter', fontWeight: FontWeight.w600),
                   ),
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: const Color(0xFF94A3B8),
-                    side: const BorderSide(color: Color(0xFF334155)),
+                    foregroundColor: Theme.of(context).textTheme.bodySmall?.color ?? Theme.of(context).textTheme.bodySmall?.color ?? const Color(0xFF94A3B8),
+                    side: BorderSide(color: Theme.of(context).dividerColor),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14)),
@@ -209,8 +209,8 @@ class PreviewReviewPage extends StatelessWidget {
                         fontFamily: 'Inter', fontWeight: FontWeight.w600),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF4F46E5),
-                    foregroundColor: Colors.white,
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: Theme.of(context).colorScheme.onSurface,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14)),

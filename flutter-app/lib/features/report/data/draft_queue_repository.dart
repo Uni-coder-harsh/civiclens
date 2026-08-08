@@ -8,6 +8,23 @@ import '../../../core/database/draft_queue_dao.dart';
 import '../../../core/network/api_providers.dart';
 import '../../../shared/report_payload.dart';
 
+/// A draft item enriched with its current [SyncState] from the DB row.
+class DraftItem {
+  final ReportPayload payload;
+  final SyncState syncState;
+  final int retryCount;
+  final String? lastError;
+  final DateTime createdAtUtc;
+
+  const DraftItem({
+    required this.payload,
+    required this.syncState,
+    this.retryCount = 0,
+    this.lastError,
+    required this.createdAtUtc,
+  });
+}
+
 /// Repository wrapping [DraftQueueDao] and local file storage.
 /// Converts between Drift [ReportDraft] rows and [ReportPayload] domain objects.
 class DraftQueueRepository {
@@ -21,6 +38,13 @@ class DraftQueueRepository {
   Stream<List<ReportPayload>> watchPendingDrafts() {
     return _dao.watchPending().map(
           (rows) => rows.map(_rowToPayload).toList(),
+        );
+  }
+
+  /// Reactive stream of all non-synced drafts as [DraftItem] (includes syncState).
+  Stream<List<DraftItem>> watchDraftItems() {
+    return _dao.watchPending().map(
+          (rows) => rows.map(_rowToDraftItem).toList(),
         );
   }
 
@@ -105,6 +129,30 @@ class DraftQueueRepository {
     );
   }
 
+  DraftItem _rowToDraftItem(ReportDraft row) {
+    final SyncState syncState;
+    switch (row.syncState) {
+      case 'uploading':
+        syncState = SyncState.uploading;
+        break;
+      case 'synced':
+        syncState = SyncState.synced;
+        break;
+      case 'failed':
+        syncState = SyncState.failed;
+        break;
+      default:
+        syncState = SyncState.pending;
+    }
+    return DraftItem(
+      payload: _rowToPayload(row),
+      syncState: syncState,
+      retryCount: row.retryCount,
+      lastError: row.lastError,
+      createdAtUtc: row.createdAtUtc,
+    );
+  }
+
   void _safeDelete(String path) {
     try {
       final file = File(path);
@@ -115,9 +163,14 @@ class DraftQueueRepository {
   }
 }
 
-// ── Riverpod Provider ─────────────────────────────────────────────────────────
+// ── Riverpod Providers ────────────────────────────────────────────────────────
 
 final draftQueueRepositoryProvider = Provider<DraftQueueRepository>((ref) {
   final db = ref.watch(appDatabaseProvider);
   return DraftQueueRepository(DraftQueueDao(db));
+});
+
+/// Top-level stream provider — safe to watch in build() without recreation bugs.
+final draftItemsStreamProvider = StreamProvider<List<DraftItem>>((ref) {
+  return ref.watch(draftQueueRepositoryProvider).watchDraftItems();
 });

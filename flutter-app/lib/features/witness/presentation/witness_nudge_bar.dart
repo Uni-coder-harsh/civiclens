@@ -83,8 +83,8 @@ class _WitnessNudgeBarState extends ConsumerState<WitnessNudgeBar>
           child: Container(
             margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
             decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [Color(0xFF1E3A5F), Color(0xFF1E293B)],
+              gradient: LinearGradient(
+                colors: [const Color(0xFF1E3A5F), Theme.of(context).colorScheme.surface],
               ),
               borderRadius: BorderRadius.circular(16),
               border:
@@ -112,11 +112,11 @@ class _WitnessNudgeBarState extends ConsumerState<WitnessNudgeBar>
                         color: Color(0xFF60A5FA), size: 20),
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       '~50m away — can you confirm this report?',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: Theme.of(context).colorScheme.onSurface,
                         fontFamily: 'Inter',
                         fontWeight: FontWeight.w600,
                         fontSize: 13,
@@ -136,10 +136,10 @@ class _WitnessNudgeBarState extends ConsumerState<WitnessNudgeBar>
                         color: const Color(0xFF3B82F6),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: const Text(
+                      child: Text(
                         'Confirm',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: Theme.of(context).colorScheme.onSurface,
                           fontFamily: 'Inter',
                           fontWeight: FontWeight.w700,
                           fontSize: 12,
@@ -150,8 +150,8 @@ class _WitnessNudgeBarState extends ConsumerState<WitnessNudgeBar>
                   const SizedBox(width: 6),
                   GestureDetector(
                     onTap: _dismiss,
-                    child: const Icon(Icons.close_rounded,
-                        color: Color(0xFF64748B), size: 18),
+                    child: Icon(Icons.close_rounded,
+                        color: Theme.of(context).textTheme.bodyMedium?.color ?? const Color(0xFF64748B), size: 18),
                   ),
                 ],
               ),
