@@ -44,6 +44,52 @@ class AuthController extends AsyncNotifier<AuthSession?> {
     );
   }
 
+  Future<String> register(String email, String password, String fullName, UserRole role) async {
+    state = const AsyncLoading();
+    try {
+      final msg = await ref.read(authRepositoryProvider).register(email, password, fullName, role);
+      state = const AsyncData(null);
+      return msg;
+    } catch (e, st) {
+      state = AsyncError(e, st);
+      rethrow;
+    }
+  }
+
+  Future<void> verifyEmailOtp(String email, String otp) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(
+      () => ref.read(authRepositoryProvider).verifyEmailOtp(email, otp),
+    );
+  }
+
+  Future<void> signInWithEmail(String email, String password) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(
+      () => ref.read(authRepositoryProvider).signInWithEmail(email, password),
+    );
+  }
+
+  Future<String> requestPasswordReset(String email) async {
+    state = const AsyncLoading();
+    try {
+      final msg = await ref.read(authRepositoryProvider).requestPasswordReset(email);
+      state = const AsyncData(null);
+      return msg;
+    } catch (e, st) {
+      state = AsyncError(e, st);
+      rethrow;
+    }
+  }
+
+  Future<void> resetPassword(String email, String otp, String newPassword) async {
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      await ref.read(authRepositoryProvider).resetPassword(email, otp, newPassword);
+      return state.value;
+    });
+  }
+
   Future<void> switchDemoRole(UserRole targetRole) async {
     state = const AsyncLoading();
     state = await AsyncValue.guard(

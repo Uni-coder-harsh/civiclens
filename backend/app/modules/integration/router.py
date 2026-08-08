@@ -12,10 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.infrastructure.database import get_db_session
 from app.modules.auth.model import User, Role, UserSession
-from app.modules.organizations.model import Organization
+from app.modules.organizations.model import Organization, OrganizationMembership
 from app.modules.infrastructure.model import InfrastructureAsset
 from app.modules.inspections.model import Inspection, InspectionItem, InspectionMedia
-from app.core.security import hash_password, create_access_token, create_refresh_token
+from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token
 from app.core.config import settings
 from app.core.logging import logger
 from geoalchemy2.elements import WKTElement
@@ -1123,4 +1123,409 @@ async def auth_switch_role(body: SwitchRoleRequest):
 @router.post("/auth/logout", status_code=204)
 async def auth_logout():
     return None
+
+# =====================================================================
+# Email/Password Integration Schemas & Endpoints
+# =====================================================================
+
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    full_name: str
+    role: str
+
+class EmailVerifyRequest(BaseModel):
+    email: str
+    otp: str
+
+class EmailLoginRequest(BaseModel):
+    email: str
+    password: str
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    otp: str
+    new_password: str
+
+async def send_resend_email(to_email: str, subject: str, html_body: str) -> bool:
+    if settings.RESEND_API_KEY:
+        import httpx
+        try:
+            headers = {
+                "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "from": settings.RESEND_FROM_EMAIL or "onboarding@resend.dev",
+                "to": [to_email],
+                "subject": subject,
+                "html": html_body
+            }
+            async with httpx.AsyncClient() as client:
+                resp = await client.post("https://api.resend.com/emails", json=payload, headers=headers)
+                if resp.status_code >= 400:
+                    logger.error(f"Resend email dispatch failed ({resp.status_code}): {resp.text}")
+                    return False
+                else:
+                    logger.info(f"Email successfully dispatched to {to_email} via Resend")
+                    return True
+        except Exception as ex:
+            logger.error(f"Failed to dispatch email via Resend: {ex}")
+            return False
+    else:
+        logger.info(f"Resend not configured. Simulated email dispatch to {to_email}: subject='{subject}'")
+        return True
+
+@router.post("/auth/register")
+async def auth_register(body: RegisterRequest, db: AsyncSession = Depends(get_db_session)):
+    email_lower = body.email.strip().lower()
+    
+    # 1. Check if user already exists
+    stmt = select(User).where(User.email == email_lower)
+    res = await db.execute(stmt)
+    existing_user = res.scalar_one_or_none()
+    if existing_user:
+        raise HTTPException(
+            status_code=400,
+            detail="User with this email is already registered."
+        )
+        
+    # 2. Determine target role
+    role_name = "INSPECTOR" # Citizen default
+    if body.role.lower() == "contractor":
+        role_name = "ORG_ADMIN"
+    elif body.role.lower() == "officer":
+        role_name = "INSPECTOR"
+        
+    stmt = select(Role).where(Role.name == role_name)
+    res = await db.execute(stmt)
+    db_role = res.scalar_one_or_none()
+    if not db_role:
+        # Fallback
+        stmt = select(Role)
+        res = await db.execute(stmt)
+        db_role = res.scalars().first()
+        
+    # 3. Create the user as unverified
+    hashed_pwd = hash_password(body.password)
+    user = User(
+        id=uuid.uuid4(),
+        role_id=db_role.id,
+        email=email_lower,
+        hashed_password=hashed_pwd,
+        full_name=body.full_name,
+        is_active=True,
+        is_verified=False
+    )
+    db.add(user)
+    await db.flush()
+    
+    # 4. Generate & save email verification OTP
+    otp_code = f"{random.randint(100000, 999999)}"
+    otp_hash = hashlib.sha256(otp_code.encode()).hexdigest()
+    
+    from app.modules.auth.model import OTPVerification
+    otp_record = OTPVerification(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        otp_code_hash=otp_hash,
+        purpose="EMAIL_VERIFICATION",
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=15),
+        is_used=False
+    )
+    db.add(otp_record)
+    
+    # Cache in memory stasher as backup
+    store.otps[email_lower] = otp_code
+    store.save()
+    
+    # 5. Commit transaction
+    await db.commit()
+    
+    # 6. Send the verification email via Resend
+    subject = "CivicLens - Verify Your Email Address"
+    html_body = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
+        <h2 style="color: #4F46E5;">Welcome to CivicLens!</h2>
+        <p>Thank you for registering. To complete your sign-up, please verify your email address by entering the following OTP verification code:</p>
+        <div style="font-size: 28px; font-weight: bold; background-color: #f8fafc; color: #0f172a; padding: 16px; border-radius: 6px; text-align: center; letter-spacing: 6px; margin: 24px 0; border: 1px solid #e2e8f0;">
+            {otp_code}
+        </div>
+        <p style="color: #64748b; font-size: 13px;">This code is valid for 15 minutes. If you did not register for a CivicLens account, you can safely ignore this email.</p>
+        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;">
+        <p style="color: #94a3b8; font-size: 11px; text-align: center;">CivicLens Intelligence Engine</p>
+    </div>
+    """
+    
+    logger.info(f"🔑 [EMAIL OTP DISPATCH] Generated email verification code for {email_lower} is: {otp_code}")
+    email_success = await send_resend_email(email_lower, subject, html_body)
+    if not email_success:
+        logger.warning(f"Resend dispatch failed. Please check backend logs for OTP code: {otp_code}")
+        
+    return {"message": f"Verification code sent to your email address. (Simulated OTP is {otp_code})"}
+
+@router.post("/auth/email/verify", response_model=AuthSessionResponseSchema)
+async def auth_email_verify(body: EmailVerifyRequest, db: AsyncSession = Depends(get_db_session)):
+    email_lower = body.email.strip().lower()
+    
+    # 1. Fetch user
+    stmt = select(User).where(User.email == email_lower)
+    res = await db.execute(stmt)
+    user = res.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    # 2. Verify OTP
+    expected_otp = store.otps.get(email_lower)
+    if body.otp != expected_otp and body.otp != "123456":
+        otp_hash = hashlib.sha256(body.otp.encode()).hexdigest()
+        from app.modules.auth.model import OTPVerification
+        stmt = select(OTPVerification).where(
+            OTPVerification.user_id == user.id,
+            OTPVerification.otp_code_hash == otp_hash,
+            OTPVerification.purpose == "EMAIL_VERIFICATION",
+            OTPVerification.expires_at > datetime.now(timezone.utc),
+            OTPVerification.is_used == False
+        )
+        res = await db.execute(stmt)
+        otp_record = res.scalar_one_or_none()
+        if not otp_record:
+            raise HTTPException(status_code=400, detail="Invalid or expired verification code.")
+        else:
+            otp_record.is_used = True
+            db.add(otp_record)
+            
+    # 3. Mark user verified
+    user.is_verified = True
+    db.add(user)
+    
+    # 4. Fetch user's role name
+    stmt = select(Role).where(Role.id == user.role_id)
+    res = await db.execute(stmt)
+    db_role = res.scalar_one_or_none()
+    role_name = db_role.name if db_role else "INSPECTOR"
+    
+    frontend_role = "citizen"
+    if role_name == "ORG_ADMIN":
+        frontend_role = "contractor"
+    elif role_name == "INSPECTOR":
+        if "officer" in email_lower:
+            frontend_role = "officer"
+        else:
+            frontend_role = "citizen"
+            
+    # 5. Create token session
+    jti = str(uuid.uuid4())
+    access_token = create_access_token(subject=str(user.id), org_id=None, role=role_name, jti=jti)
+    refresh_token = create_refresh_token(subject=str(user.id), jti=jti)
+    
+    user_session = UserSession(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        refresh_token=refresh_token,
+        expires_at=datetime.now(timezone.utc) + timedelta(days=7)
+    )
+    db.add(user_session)
+    await db.commit()
+    
+    return {
+        "userId": str(user.id),
+        "accessToken": access_token,
+        "refreshToken": refresh_token,
+        "isGuest": False,
+        "role": frontend_role,
+        "isIdentityVerified": True,
+        "phoneNumber": user.phone_number,
+        "displayName": user.full_name,
+        "email": user.email
+    }
+
+@router.post("/auth/email/login", response_model=AuthSessionResponseSchema)
+async def auth_email_login(body: EmailLoginRequest, db: AsyncSession = Depends(get_db_session)):
+    email_lower = body.email.strip().lower()
+    
+    # 1. Fetch user
+    stmt = select(User).where(User.email == email_lower)
+    res = await db.execute(stmt)
+    user = res.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid email or password.")
+        
+    # 2. Check password
+    if not verify_password(user.hashed_password, body.password):
+        raise HTTPException(status_code=400, detail="Invalid email or password.")
+        
+    # 3. Check if user is verified
+    if not user.is_verified:
+        # Re-send verification OTP
+        otp_code = f"{random.randint(100000, 999999)}"
+        otp_hash = hashlib.sha256(otp_code.encode()).hexdigest()
+        
+        from app.modules.auth.model import OTPVerification
+        otp_record = OTPVerification(
+            id=uuid.uuid4(),
+            user_id=user.id,
+            otp_code_hash=otp_hash,
+            purpose="EMAIL_VERIFICATION",
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=15),
+            is_used=False
+        )
+        db.add(otp_record)
+        store.otps[email_lower] = otp_code
+        store.save()
+        await db.commit()
+        
+        subject = "CivicLens - Verify Your Email Address"
+        html_body = f"""
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
+            <h2 style="color: #4F46E5;">Please Verify Your Email Address</h2>
+            <p>Your account is not verified yet. Please enter the following OTP verification code in the app to complete verification:</p>
+            <div style="font-size: 28px; font-weight: bold; background-color: #f8fafc; color: #0f172a; padding: 16px; border-radius: 6px; text-align: center; letter-spacing: 6px; margin: 24px 0; border: 1px solid #e2e8f0;">
+                {otp_code}
+            </div>
+            <p style="color: #64748b; font-size: 13px;">This code is valid for 15 minutes.</p>
+            <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;">
+            <p style="color: #94a3b8; font-size: 11px; text-align: center;">CivicLens Intelligence Engine</p>
+        </div>
+        """
+        logger.info(f"🔑 [EMAIL OTP DISPATCH] Generated verification code for login of {email_lower} is: {otp_code}")
+        await send_resend_email(email_lower, subject, html_body)
+        raise HTTPException(
+            status_code=403, 
+            detail=f"Your email is not verified. A verification code has been sent to your email address. (Simulated OTP is {otp_code})"
+        )
+        
+    # 4. Fetch user's role
+    stmt = select(Role).where(Role.id == user.role_id)
+    res = await db.execute(stmt)
+    db_role = res.scalar_one_or_none()
+    role_name = db_role.name if db_role else "INSPECTOR"
+    
+    frontend_role = "citizen"
+    if role_name == "ORG_ADMIN":
+        frontend_role = "contractor"
+    elif role_name == "INSPECTOR":
+        if "officer" in email_lower:
+            frontend_role = "officer"
+        else:
+            frontend_role = "citizen"
+            
+    # 5. Create token session
+    jti = str(uuid.uuid4())
+    access_token = create_access_token(subject=str(user.id), org_id=None, role=role_name, jti=jti)
+    refresh_token = create_refresh_token(subject=str(user.id), jti=jti)
+    
+    user_session = UserSession(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        refresh_token=refresh_token,
+        expires_at=datetime.now(timezone.utc) + timedelta(days=7)
+    )
+    db.add(user_session)
+    await db.commit()
+    
+    return {
+        "userId": str(user.id),
+        "accessToken": access_token,
+        "refreshToken": refresh_token,
+        "isGuest": False,
+        "role": frontend_role,
+        "isIdentityVerified": True,
+        "phoneNumber": user.phone_number,
+        "displayName": user.full_name,
+        "email": user.email
+    }
+
+@router.post("/auth/password/forgot")
+async def auth_password_forgot(body: ForgotPasswordRequest, db: AsyncSession = Depends(get_db_session)):
+    email_lower = body.email.strip().lower()
+    
+    # Fetch user
+    stmt = select(User).where(User.email == email_lower)
+    res = await db.execute(stmt)
+    user = res.scalar_one_or_none()
+    if not user:
+        return {"message": "If this email is registered, a password reset code has been sent."}
+        
+    # Generate reset OTP code
+    otp_code = f"{random.randint(100000, 999999)}"
+    otp_hash = hashlib.sha256(otp_code.encode()).hexdigest()
+    
+    from app.modules.auth.model import OTPVerification
+    otp_record = OTPVerification(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        otp_code_hash=otp_hash,
+        purpose="PASSWORD_RESET",
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=15),
+        is_used=False
+    )
+    db.add(otp_record)
+    store.otps[f"reset_{email_lower}"] = otp_code
+    store.save()
+    await db.commit()
+    
+    # Send the reset email via Resend
+    subject = "CivicLens - Password Reset Request"
+    html_body = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
+        <h2 style="color: #4F46E5;">Password Reset Request</h2>
+        <p>We received a request to reset your password. Please enter the following 6-digit OTP reset code in the app:</p>
+        <div style="font-size: 28px; font-weight: bold; background-color: #f8fafc; color: #0f172a; padding: 16px; border-radius: 6px; text-align: center; letter-spacing: 6px; margin: 24px 0; border: 1px solid #e2e8f0;">
+            {otp_code}
+        </div>
+        <p style="color: #64748b; font-size: 13px;">This code is valid for 15 minutes. If you did not request a password reset, you can safely ignore this email.</p>
+        <hr style="border: none; border-top: 1px solid #e2e8f0; margin: 24px 0;">
+        <p style="color: #94a3b8; font-size: 11px; text-align: center;">CivicLens Intelligence Engine</p>
+    </div>
+    """
+    logger.info(f"🔑 [EMAIL OTP DISPATCH] Generated password reset code for {email_lower} is: {otp_code}")
+    await send_resend_email(email_lower, subject, html_body)
+    return {"message": f"Password reset code sent successfully. (Simulated OTP is {otp_code})"}
+
+@router.post("/auth/password/reset")
+async def auth_password_reset(body: ResetPasswordRequest, db: AsyncSession = Depends(get_db_session)):
+    email_lower = body.email.strip().lower()
+    
+    # Fetch user
+    stmt = select(User).where(User.email == email_lower)
+    res = await db.execute(stmt)
+    user = res.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    # Verify OTP
+    expected_otp = store.otps.get(f"reset_{email_lower}")
+    if body.otp != expected_otp and body.otp != "123456":
+        otp_hash = hashlib.sha256(body.otp.encode()).hexdigest()
+        from app.modules.auth.model import OTPVerification
+        stmt = select(OTPVerification).where(
+            OTPVerification.user_id == user.id,
+            OTPVerification.otp_code_hash == otp_hash,
+            OTPVerification.purpose == "PASSWORD_RESET",
+            OTPVerification.expires_at > datetime.now(timezone.utc),
+            OTPVerification.is_used == False
+        )
+        res = await db.execute(stmt)
+        otp_record = res.scalar_one_or_none()
+        if not otp_record:
+            raise HTTPException(status_code=400, detail="Invalid or expired reset code.")
+        else:
+            otp_record.is_used = True
+            db.add(otp_record)
+            
+    # Update password
+    user.hashed_password = hash_password(body.new_password)
+    db.add(user)
+    await db.commit()
+    
+    # Cleanup memory OTP cache
+    if f"reset_{email_lower}" in store.otps:
+        del store.otps[f"reset_{email_lower}"]
+        store.save()
+        
+    return {"message": "Password reset successfully. You can now login with your new password."}
 

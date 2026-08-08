@@ -3,7 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 
 import '../../../core/config/feature_flags.dart';
 import '../../../features/auth/application/auth_controller.dart';
@@ -45,16 +46,16 @@ class _MapViewState {
 
 class _MapNotifier extends Notifier<_MapViewState> {
   Timer? _debounce;
-  CameraPosition? _lastCamera;
+  LatLng? _lastCenter;
 
   @override
   _MapViewState build() => const _MapViewState();
 
-  void onCameraIdle(CameraPosition position) {
-    _lastCamera = position;
+  void onPositionChanged(LatLng center) {
+    _lastCenter = center;
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 500), () {
-      _fetchDefects(position.target.latitude, position.target.longitude);
+      _fetchDefects(center.latitude, center.longitude);
     });
   }
 
@@ -82,11 +83,13 @@ class _MapNotifier extends Notifier<_MapViewState> {
   }
 
   void refresh() {
-    if (_lastCamera != null) {
+    if (_lastCenter != null) {
       _fetchDefects(
-        _lastCamera!.target.latitude,
-        _lastCamera!.target.longitude,
+        _lastCenter!.latitude,
+        _lastCenter!.longitude,
       );
+    } else {
+      _fetchDefects(28.6139, 77.2090); // New Delhi
     }
   }
 }
@@ -96,10 +99,6 @@ final _mapNotifierProvider =
 
 // ── Map Page ──────────────────────────────────────────────────────────────────
 
-/// Route: `/home/map`
-///
-/// Interactive Google Map with custom cached markers, pin tap bottom sheet,
-/// debounced camera-idle refetch, and coverage heatmap toggle stub.
 class MapPage extends ConsumerStatefulWidget {
   const MapPage({super.key});
 
@@ -108,12 +107,21 @@ class MapPage extends ConsumerStatefulWidget {
 }
 
 class _MapPageState extends ConsumerState<MapPage> {
-  GoogleMapController? _mapController;
+  final MapController _mapController = MapController();
 
-  static const _initialPosition = CameraPosition(
-    target: LatLng(28.6139, 77.2090), // New Delhi
-    zoom: 13,
-  );
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(_mapNotifierProvider.notifier).refresh();
+    });
+  }
+
+  @override
+  void dispose() {
+    _mapController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -123,34 +131,28 @@ class _MapPageState extends ConsumerState<MapPage> {
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
-          // Google Map
-          GoogleMap(
-            initialCameraPosition: _initialPosition,
-            myLocationEnabled: true,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            mapType: MapType.normal,
-            style: _mapStyle,
-            markers: _buildMarkers(mapState.defects),
-            onMapCreated: (controller) {
-              _mapController = controller;
-              // Initial fetch after map ready
-              ref
-                  .read(_mapNotifierProvider.notifier)
-                  .onCameraIdle(_initialPosition);
-            },
-            onCameraIdle: () {
-              if (_mapController == null) return;
-              _mapController!.getVisibleRegion().then((bounds) {
-                final center = LatLng(
-                  (bounds.northeast.latitude + bounds.southwest.latitude) / 2,
-                  (bounds.northeast.longitude + bounds.southwest.longitude) / 2,
-                );
-                ref.read(_mapNotifierProvider.notifier).onCameraIdle(
-                      CameraPosition(target: center),
-                    );
-              });
-            },
+          // OpenStreetMap Leaflet Layer
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: const LatLng(28.6139, 77.2090),
+              initialZoom: 13,
+              minZoom: 3,
+              maxZoom: 18,
+              onPositionChanged: (position, hasGesture) {
+                ref.read(_mapNotifierProvider.notifier).onPositionChanged(position.center);
+              },
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+                userAgentPackageName: 'com.civiclens.app',
+                subdomains: const ['a', 'b', 'c', 'd'],
+              ),
+              MarkerLayer(
+                markers: _buildMarkers(mapState.defects),
+              ),
+            ],
           ),
 
           // Top overlay: Status pill + Role Action Pill + Coverage toggle
@@ -304,9 +306,7 @@ class _MapPageState extends ConsumerState<MapPage> {
             child: _MapControlButton(
               icon: Icons.my_location_rounded,
               onTap: () {
-                _mapController?.animateCamera(
-                  CameraUpdate.newCameraPosition(_initialPosition),
-                );
+                _mapController.move(const LatLng(28.6139, 77.2090), 13);
               },
             ),
           ),
@@ -438,62 +438,59 @@ class _MapPageState extends ConsumerState<MapPage> {
     );
   }
 
-  Set<Marker> _buildMarkers(List<NearbyDefect> defects) {
+  List<Marker> _buildMarkers(List<NearbyDefect> defects) {
     return defects.map((defect) {
       return Marker(
-        markerId: MarkerId(defect.reportId),
-        position: LatLng(defect.latitude, defect.longitude),
-        icon: _markerIcon(defect),
-        onTap: () =>
-            ref.read(_mapNotifierProvider.notifier).selectDefect(defect),
-        infoWindow: InfoWindow(title: defect.category.name),
+        point: LatLng(defect.latitude, defect.longitude),
+        width: 45,
+        height: 45,
+        child: GestureDetector(
+          onTap: () => ref.read(_mapNotifierProvider.notifier).selectDefect(defect),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              const Icon(
+                Icons.location_on_rounded,
+                size: 45,
+                color: Colors.white,
+              ),
+              Positioned(
+                top: 5,
+                child: Icon(
+                  Icons.circle,
+                  size: 20,
+                  color: _statusColor(defect.status),
+                ),
+              ),
+            ],
+          ),
+        ),
       );
-    }).toSet();
+    }).toList();
   }
 
-  BitmapDescriptor _markerIcon(NearbyDefect defect) {
-    // Use cached BitmapDescriptor hues as approximations for custom styling.
-    // For full custom marker rendering, a separate renderMarker pipeline is needed.
-    final hue = _statusHue(defect.status);
-    return BitmapDescriptor.defaultMarkerWithHue(hue);
-  }
-
-  double _statusHue(DefectStatus s) {
+  Color _statusColor(DefectStatus s) {
     switch (s) {
       case DefectStatus.submitted:
       case DefectStatus.underReview:
-        return BitmapDescriptor.hueYellow; // Amber
+        return Colors.amber;
       case DefectStatus.aiVerified:
-        return BitmapDescriptor.hueOrange; // Orange
+        return Colors.orange;
       case DefectStatus.assigned:
       case DefectStatus.inProgress:
-        return BitmapDescriptor.hueAzure; // Blue
+        return Colors.blue;
       case DefectStatus.awaitAcceptance:
-        return BitmapDescriptor.hueCyan; // Cyan
+        return Colors.cyan;
       case DefectStatus.resolved:
-        return BitmapDescriptor.hueGreen; // Green
+        return Colors.green;
       case DefectStatus.rejected:
-        return BitmapDescriptor.hueViolet; // Grey substitute
+        return Colors.grey;
       case DefectStatus.reopened:
-        return BitmapDescriptor.hueRed; // Red
+        return Colors.red;
       case DefectStatus.closed:
-        return BitmapDescriptor.hueRose;
+        return Colors.purple;
     }
   }
-
-  /// Dark map style JSON to match the app's dark theme.
-  static const String _mapStyle = '''
-[
-  {"elementType": "geometry", "stylers": [{"color": "#1E293B"}]},
-  {"elementType": "labels.text.stroke", "stylers": [{"color": "#0F172A"}]},
-  {"elementType": "labels.text.fill", "stylers": [{"color": "#94A3B8"}]},
-  {"featureType": "road", "elementType": "geometry", "stylers": [{"color": "#334155"}]},
-  {"featureType": "road", "elementType": "geometry.stroke", "stylers": [{"color": "#1E293B"}]},
-  {"featureType": "water", "elementType": "geometry", "stylers": [{"color": "#0F172A"}]},
-  {"featureType": "poi", "stylers": [{"visibility": "off"}]},
-  {"featureType": "transit", "stylers": [{"visibility": "off"}]}
-]
-''';
 }
 
 // ── Sub-Widgets ───────────────────────────────────────────────────────────────

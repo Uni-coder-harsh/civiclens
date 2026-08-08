@@ -10,6 +10,7 @@ class AuthSession {
   final bool isIdentityVerified;
   final String? phoneNumber;
   final String? displayName;
+  final String? email;
 
   const AuthSession({
     required this.userId,
@@ -20,6 +21,7 @@ class AuthSession {
     this.isIdentityVerified = false,
     this.phoneNumber,
     this.displayName,
+    this.email,
   });
 
   /// Factory constructor for an anonymous guest session.
@@ -46,6 +48,7 @@ class AuthSession {
     bool? isIdentityVerified,
     String? phoneNumber,
     String? displayName,
+    String? email,
   }) {
     return AuthSession(
       userId: userId ?? this.userId,
@@ -56,6 +59,7 @@ class AuthSession {
       isIdentityVerified: isIdentityVerified ?? this.isIdentityVerified,
       phoneNumber: phoneNumber ?? this.phoneNumber,
       displayName: displayName ?? this.displayName,
+      email: email ?? this.email,
     );
   }
 
@@ -72,6 +76,7 @@ class AuthSession {
       isIdentityVerified: json['isIdentityVerified'] as bool? ?? false,
       phoneNumber: json['phoneNumber'] as String?,
       displayName: json['displayName'] as String?,
+      email: json['email'] as String?,
     );
   }
 
@@ -84,6 +89,7 @@ class AuthSession {
         'isIdentityVerified': isIdentityVerified,
         'phoneNumber': phoneNumber,
         'displayName': displayName,
+        'email': email,
       };
 
   @override

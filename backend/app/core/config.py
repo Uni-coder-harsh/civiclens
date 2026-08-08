@@ -43,7 +43,7 @@ class Settings(BaseSettings):
 
     # Email Service (Resend)
     RESEND_API_KEY: str | None = None
-    RESEND_FROM_EMAIL: str = "noreply@civiclens.com"
+    RESEND_FROM_EMAIL: str = "onboarding@resend.dev"
 
     # CORS Configs
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"

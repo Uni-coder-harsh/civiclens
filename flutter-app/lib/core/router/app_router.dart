@@ -5,6 +5,7 @@ import '../config/app_config.dart';
 import '../../features/auth/application/auth_controller.dart';
 import '../../features/auth/presentation/splash_page.dart';
 import '../../features/auth/presentation/entry_page.dart';
+import '../../features/auth/presentation/email_auth_pages.dart';
 import '../../features/auth/presentation/otp_phone_page.dart';
 import '../../features/auth/presentation/otp_verify_page.dart';
 import '../../features/home/presentation/home_shell.dart';
@@ -91,11 +92,37 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const EntryPage(),
         routes: [
           GoRoute(
+            path: 'login',
+            builder: (context, state) => const EmailLoginPage(),
+          ),
+          GoRoute(
+            path: 'register',
+            builder: (context, state) => const EmailRegisterPage(),
+          ),
+          GoRoute(
+            path: 'verify',
+            builder: (context, state) {
+              final email = state.extra as String? ?? '';
+              return EmailVerifyOtpPage(email: email);
+            },
+          ),
+          GoRoute(
+            path: 'forgot-password',
+            builder: (context, state) => const ForgotPasswordPage(),
+          ),
+          GoRoute(
+            path: 'reset-password',
+            builder: (context, state) {
+              final email = state.extra as String? ?? '';
+              return ResetPasswordPage(email: email);
+            },
+          ),
+          GoRoute(
             path: 'phone',
             builder: (context, state) => const OtpPhonePage(),
           ),
           GoRoute(
-            path: 'verify',
+            path: 'verify-phone',
             builder: (context, state) {
               final phone = state.extra as String? ?? '';
               return OtpVerifyPage(phone: phone);

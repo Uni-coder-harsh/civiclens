@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../application/auth_controller.dart';
 
 /// Phone number entry for OTP authentication.
@@ -31,15 +32,16 @@ class _OtpPhonePageState extends ConsumerState<OtpPhonePage> {
       final phone = '+91${_phoneController.text.trim()}';
       await ref.read(authControllerProvider.notifier).requestOtp(phone);
       if (mounted) {
-        context.go('/entry/verify', extra: phone);
+        context.go('/entry/verify-phone', extra: phone);
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             backgroundColor: Theme.of(context).colorScheme.surface,
-            content:
-                Text('Error: $e', style: TextStyle(color: Theme.of(context).colorScheme.onSurface)),
+            content: Text('Error: $e',
+                style:
+                    TextStyle(color: Theme.of(context).colorScheme.onSurface)),
           ),
         );
       }
@@ -86,7 +88,8 @@ class _OtpPhonePageState extends ConsumerState<OtpPhonePage> {
                   style: TextStyle(
                     fontFamily: 'Inter',
                     fontSize: 14,
-                    color: Theme.of(context).textTheme.bodySmall?.color ?? const Color(0xFF94A3B8),
+                    color: Theme.of(context).textTheme.bodySmall?.color ??
+                        const Color(0xFF94A3B8),
                   ),
                 ),
                 const SizedBox(height: 40),
@@ -104,7 +107,8 @@ class _OtpPhonePageState extends ConsumerState<OtpPhonePage> {
                             horizontal: 16, vertical: 18),
                         decoration: BoxDecoration(
                           border: Border(
-                              right: BorderSide(color: Theme.of(context).dividerColor)),
+                              right: BorderSide(
+                                  color: Theme.of(context).dividerColor)),
                         ),
                         child: Text(
                           '+91',
@@ -157,15 +161,20 @@ class _OtpPhonePageState extends ConsumerState<OtpPhonePage> {
                   padding:
                       const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                    color:
+                        Theme.of(context).colorScheme.primary.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                        color: Theme.of(context).colorScheme.primary.withOpacity(0.3)),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primary
+                            .withOpacity(0.3)),
                   ),
                   child: Row(
                     children: [
                       Icon(Icons.info_outline_rounded,
-                          color: Theme.of(context).colorScheme.primary, size: 16),
+                          color: Theme.of(context).colorScheme.primary,
+                          size: 16),
                       const SizedBox(width: 8),
                       const Expanded(
                         child: Text(
@@ -189,8 +198,10 @@ class _OtpPhonePageState extends ConsumerState<OtpPhonePage> {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Theme.of(context).colorScheme.primary,
                       foregroundColor: Theme.of(context).colorScheme.onSurface,
-                      disabledBackgroundColor:
-                          Theme.of(context).colorScheme.primary.withOpacity(0.5),
+                      disabledBackgroundColor: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withOpacity(0.5),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
@@ -201,7 +212,8 @@ class _OtpPhonePageState extends ConsumerState<OtpPhonePage> {
                             width: 22,
                             height: 22,
                             child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Theme.of(context).colorScheme.onSurface),
+                                strokeWidth: 2,
+                                color: Theme.of(context).colorScheme.onSurface),
                           )
                         : const Text(
                             'Send OTP',

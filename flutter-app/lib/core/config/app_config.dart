@@ -7,10 +7,9 @@ abstract class AppConfig {
       static const bool useMockApi = false;
   static const bool isDemoBuild = false; // Set false for production builds
   
-  // Set to true for local development, false to use your deployed Railway backend
-  static const bool useLocalBackend = false;
+  static const bool useLocalBackend = true;
   
-  static const String localApiBaseUrl = 'http://localhost:8000';
+  static const String localApiBaseUrl = 'http://10.0.2.2:8000';
   static const String remoteApiBaseUrl = 'https://civiclens-production-5fbb.up.railway.app'; 
   
   static String get apiBaseUrl => useLocalBackend ? localApiBaseUrl : remoteApiBaseUrl;
