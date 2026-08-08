@@ -67,7 +67,7 @@ class _DroneUploadController extends StateNotifier<_DroneUploadState> {
   _DroneUploadController(this._dio) : super(const _DroneUploadState());
 
   Future<void> pickAndUpload() async {
-    final result = await FilePicker.pickFiles(
+    final result = await FilePicker.platform.pickFiles(
       type: FileType.video,
       allowMultiple: false,
     );
