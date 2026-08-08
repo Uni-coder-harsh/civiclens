@@ -180,7 +180,43 @@ class AuthService:
             is_used=False,
         )
         await self.otp_repo.create(otp_record)
-        logger.info(f"Simulated OTP dispatch to {user.email}: purpose={otp_req.purpose.value}, code={otp_code}")
+        
+        # Send dynamic OTP email using Resend
+        if settings.RESEND_API_KEY:
+            import httpx
+            try:
+                headers = {
+                    "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+                    "Content-Type": "application/json"
+                }
+                payload = {
+                    "from": settings.RESEND_FROM_EMAIL,
+                    "to": [user.email],
+                    "subject": f"CivicLens Verification Code: {otp_code}",
+                    "html": f"""
+                    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 5px;">
+                        <h2 style="color: #333;">CivicLens Identity Verification</h2>
+                        <p>Hello {user.full_name},</p>
+                        <p>We received a request to verify your account identity. Your 6-digit verification code is:</p>
+                        <div style="font-size: 24px; font-weight: bold; background-color: #f5f5f5; padding: 15px; border-radius: 4px; text-align: center; letter-spacing: 5px; margin: 20px 0;">
+                            {otp_code}
+                        </div>
+                        <p style="color: #666; font-size: 12px;">This code is valid for 5 minutes. If you did not make this request, you can safely ignore this email.</p>
+                        <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+                        <p style="color: #999; font-size: 11px; text-align: center;">CivicLens Intelligence Engine</p>
+                    </div>
+                    """
+                }
+                async with httpx.AsyncClient() as client:
+                    resp = await client.post("https://api.resend.com/emails", json=payload, headers=headers)
+                    if resp.status_code >= 400:
+                        logger.error(f"Resend dispatch failed ({resp.status_code}): {resp.text}")
+                    else:
+                        logger.info(f"OTP successfully dispatched to {user.email} via Resend")
+            except Exception as ex:
+                logger.error(f"Failed to dispatch OTP email via Resend: {ex}")
+        else:
+            logger.info(f"Resend not configured. Simulated OTP dispatch to {user.email}: purpose={otp_req.purpose.value}, code={otp_code}")
 
     async def verify_otp_token(self, verify_data: OTPVerify) -> str:
         user = await self.user_repo.get_by_email(verify_data.email)

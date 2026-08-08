@@ -1,10 +1,25 @@
 import uuid
 import math
-from datetime import datetime, timezone
+import json
+import io
+import datetime
+from datetime import datetime, timezone, timedelta
 from typing import List, Optional
-from fastapi import APIRouter, Query, status, HTTPException
+from fastapi import APIRouter, Query, status, HTTPException, Depends, Request, Form, File, UploadFile
 from pydantic import BaseModel, Field
 from app.modules.integration.store import store
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from app.infrastructure.database import get_db_session
+from app.modules.auth.model import User, Role, UserSession
+from app.modules.organizations.model import Organization
+from app.modules.infrastructure.model import InfrastructureAsset
+from app.modules.inspections.model import Inspection, InspectionItem, InspectionMedia
+from app.core.security import hash_password, create_access_token, create_refresh_token
+from app.core.config import settings
+from app.core.logging import logger
+from geoalchemy2.elements import WKTElement
+from minio import Minio
 
 router = APIRouter(prefix="/v1", tags=["Flutter Integration"])
 
@@ -244,15 +259,180 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
     return R * c
 
+def upload_file_to_storage(file_data: bytes, object_name: str, content_type: str) -> str:
+    try:
+        # Initialize Minio client (which can connect to MinIO or Supabase S3)
+        client = Minio(
+            settings.MINIO_ENDPOINT,
+            access_key=settings.MINIO_ROOT_USER,
+            secret_key=settings.MINIO_ROOT_PASSWORD,
+            secure=settings.MINIO_SECURE
+        )
+        
+        # Check if bucket exists, if not, create it
+        found = client.bucket_exists(settings.MINIO_BUCKET_NAME)
+        if not found:
+            client.make_bucket(settings.MINIO_BUCKET_NAME)
+            # Set public read policy for the bucket
+            policy = {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Principal": "*",
+                        "Action": ["s3:GetObject"],
+                        "Resource": [f"arn:aws:s3:::{settings.MINIO_BUCKET_NAME}/*"]
+                    }
+                ]
+            }
+            client.set_bucket_policy(settings.MINIO_BUCKET_NAME, json.dumps(policy))
+            
+        # Upload object
+        client.put_object(
+            settings.MINIO_BUCKET_NAME,
+            object_name,
+            io.BytesIO(file_data),
+            len(file_data),
+            content_type=content_type
+        )
+        
+        # Construct public URL
+        protocol = "https" if settings.MINIO_SECURE else "http"
+        # If it's a supabase endpoint, clean up URL construction
+        endpoint = settings.MINIO_ENDPOINT
+        return f"{protocol}://{endpoint}/{settings.MINIO_BUCKET_NAME}/{object_name}"
+    except Exception as e:
+        logger.error(f"Failed to upload file to object storage: {e}")
+        # Return fallback URL
+        return f"https://images.unsplash.com/photo-1515162816999-a0c47dc192f7"
+
 # =====================================================================
 # API Route Implementations
 # =====================================================================
 
 @router.post("/reports", response_model=ReportResponseSchema, status_code=status.HTTP_201_CREATED)
-async def upload_infrastructure_report(payload: ReportPayloadSchema):
+async def upload_infrastructure_report(request: Request, db: AsyncSession = Depends(get_db_session)):
     now_str = datetime.now(timezone.utc).isoformat()
+    content_type = request.headers.get("content-type", "")
     
-    # Store NearbyDefect
+    image_url = "https://images.unsplash.com/photo-1515162816999-a0c47dc192f7"
+    file_bytes = b""
+    mime_type = "image/jpeg"
+    
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        payload_str = form.get("payload")
+        if not payload_str:
+            raise HTTPException(status_code=400, detail="Missing payload form field")
+        payload_dict = json.loads(payload_str)
+        payload = ReportPayloadSchema(**payload_dict)
+        
+        image_file = form.get("image")
+        if image_file:
+            file_bytes = await image_file.read()
+            mime_type = image_file.content_type or "image/jpeg"
+            if file_bytes:
+                object_name = f"reports/{payload.id}.jpg"
+                image_url = upload_file_to_storage(file_bytes, object_name, mime_type)
+    else:
+        payload_bytes = await request.body()
+        payload_dict = json.loads(payload_bytes)
+        payload = ReportPayloadSchema(**payload_dict)
+
+    # Save to Neon PostgreSQL database with geospatial point geometry
+    try:
+        # 1. Fetch default organization
+        stmt = select(Organization).where(Organization.name == "CivicLens Global")
+        res = await db.execute(stmt)
+        default_org = res.scalar_one_or_none()
+        org_id = default_org.id if default_org else uuid.uuid4()
+        
+        # 2. Determine asset details
+        category_lower = payload.category.lower()
+        asset_type = "BRIDGE" if "bridge" in category_lower else "ROAD"
+        
+        severity_map = {
+            "low": "GOOD",
+            "medium": "FAIR",
+            "high": "POOR",
+            "critical": "CRITICAL"
+        }
+        asset_status = severity_map.get(payload.severity.lower(), "FAIR")
+        
+        # Create InfrastructureAsset record with PostGIS Point
+        geom_point = WKTElement(f"POINT({payload.capture.longitude} {payload.capture.latitude})", srid=4326)
+        asset = InfrastructureAsset(
+            id=uuid.uuid4(),
+            organization_id=org_id,
+            name=f"Report: {payload.category}",
+            type=asset_type,
+            geometry=geom_point,
+            classification="MUNICIPAL",
+            status=asset_status,
+            address="Pune, India"
+        )
+        db.add(asset)
+        await db.flush()
+        
+        # 3. Create Inspection record
+        inspector_id = None
+        try:
+            inspector_id = uuid.UUID(payload.user_id)
+        except Exception:
+            pass
+            
+        inspection = Inspection(
+            id=uuid.uuid4(),
+            asset_id=asset.id,
+            inspector_id=inspector_id,
+            scheduled_at=datetime.now(timezone.utc),
+            started_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(timezone.utc),
+            status="COMPLETED"
+        )
+        db.add(inspection)
+        await db.flush()
+        
+        # 4. Create InspectionItem record
+        item_severity_map = {
+            "low": "MINOR",
+            "medium": "MODERATE",
+            "high": "SEVERE",
+            "critical": "SEVERE"
+        }
+        detected_sev = item_severity_map.get(payload.severity.lower(), "MODERATE")
+        
+        inspection_item = InspectionItem(
+            id=uuid.uuid4(),
+            inspection_id=inspection.id,
+            location_geometry=geom_point,
+            description=payload.description,
+            detected_severity=detected_sev,
+            assigned_severity=detected_sev,
+            notes="Submitted via mobile integration client."
+        )
+        db.add(inspection_item)
+        await db.flush()
+        
+        # 5. Create InspectionMedia record
+        inspection_media = InspectionMedia(
+            id=uuid.uuid4(),
+            inspection_item_id=inspection_item.id,
+            media_type="IMAGE",
+            file_url=image_url,
+            file_size_bytes=len(file_bytes) if file_bytes else 12500,
+            mime_type=mime_type
+        )
+        db.add(inspection_media)
+        
+        # 6. Commit transaction to Neon DB
+        await db.commit()
+        logger.info(f"Successfully stashed report {payload.id} in Neon DB.")
+    except Exception as db_err:
+        logger.error(f"Failed to persist report {payload.id} in Neon database: {db_err}")
+        await db.rollback()
+
+    # Fallback/Parallel Memory Cache Sync for local queries
     store.defects[payload.id] = {
         "report_id": payload.id,
         "status": "aiVerified",
@@ -260,11 +440,10 @@ async def upload_infrastructure_report(payload: ReportPayloadSchema):
         "latitude": payload.capture.latitude,
         "longitude": payload.capture.longitude,
         "contractor_id": payload.contractor_id,
-        "thumbnail_url": "https://images.unsplash.com/photo-1515162816999-a0c47dc192f7",
+        "thumbnail_url": image_url,
         "watermark_verified": True
     }
 
-    # Store TicketSummary
     store.tickets[payload.id] = {
         "report_id": payload.id,
         "status": "aiVerified",
@@ -272,7 +451,7 @@ async def upload_infrastructure_report(payload: ReportPayloadSchema):
         "severity": payload.severity,
         "capture": payload.capture.dict(),
         "zone": "Pune Central",
-        "thumbnail_url": "https://images.unsplash.com/photo-1515162816999-a0c47dc192f7",
+        "thumbnail_url": image_url,
         "watermark_verified": True,
         "ai_confidence": 0.92,
         "days_in_status": 0,
@@ -280,7 +459,6 @@ async def upload_infrastructure_report(payload: ReportPayloadSchema):
         "assigned_contractor_id": payload.contractor_id
     }
 
-    # Store Timeline Event
     store.timelines[payload.id] = [
         {
             "event_id": f"evt_{payload.id}_01",
@@ -297,7 +475,6 @@ async def upload_infrastructure_report(payload: ReportPayloadSchema):
             "at_utc": now_str
         }
     ]
-
     store.save()
 
     return {
@@ -812,7 +989,7 @@ async def auth_otp_send(body: OTPSendRequest):
     return {"message": "Verification code dispatched successfully."}
 
 @router.post("/auth/otp/verify", response_model=AuthSessionResponseSchema)
-async def auth_otp_verify(body: OTPVerifyRequest):
+async def auth_otp_verify(body: OTPVerifyRequest, db: AsyncSession = Depends(get_db_session)):
     phone = body.phone
     expected_otp = store.otps.get(phone)
     if body.otp != expected_otp and body.otp != "123456":
@@ -831,10 +1008,87 @@ async def auth_otp_verify(body: OTPVerifyRequest):
         role = "citizen"
         display_name = "Verified Citizen"
         
+    # Persistent database storage in PostgreSQL / Neon
+    try:
+        # Determine the database role name
+        role_name_map = {
+            "officer": "INSPECTOR",
+            "contractor": "INSPECTOR", # Fallback to INSPECTOR/ORG_ADMIN
+            "admin": "SUPER_ADMIN",
+            "citizen": "INSPECTOR" # Fallback to INSPECTOR
+        }
+        db_role_name = role_name_map.get(role, "INSPECTOR")
+        
+        # Get role from database
+        stmt = select(Role).where(Role.name == db_role_name)
+        res = await db.execute(stmt)
+        db_role = res.scalar_one_or_none()
+        if not db_role:
+            # Create a fallback role if not exists
+            db_role = Role(name=db_role_name, description=f"Seeded {db_role_name} Role")
+            db.add(db_role)
+            await db.flush()
+            
+        # Clean phone number for email generation
+        phone_clean = phone.replace("+", "").replace(" ", "").replace("-", "")
+        email = f"phone_{phone_clean}@civiclens.local"
+        
+        # Check if user already exists
+        stmt = select(User).where(User.phone_number == phone)
+        res = await db.execute(stmt)
+        db_user = res.scalar_one_or_none()
+        
+        if not db_user:
+            # Check by email as secondary check
+            stmt = select(User).where(User.email == email)
+            res = await db.execute(stmt)
+            db_user = res.scalar_one_or_none()
+            
+        if not db_user:
+            # Create new user record in Neon Postgres
+            db_user = User(
+                id=uuid.uuid4(),
+                role_id=db_role.id,
+                email=email,
+                hashed_password=hash_password("DemoPhonePassword123!"),
+                full_name=display_name,
+                phone_number=phone,
+                is_active=True,
+                is_verified=True
+            )
+            db.add(db_user)
+            await db.flush()
+            
+        # Create token session
+        jti = str(uuid.uuid4())
+        access_token = create_access_token(subject=str(db_user.id), org_id=None, role=db_role.name, jti=jti)
+        refresh_token = create_refresh_token(subject=str(db_user.id), jti=jti)
+        
+        # Save session to user_sessions table
+        user_session = UserSession(
+            id=uuid.uuid4(),
+            user_id=db_user.id,
+            refresh_token=refresh_token,
+            expires_at=datetime.now(timezone.utc) + timedelta(days=7)
+        )
+        db.add(user_session)
+        await db.commit()
+        
+        user_id_str = str(db_user.id)
+        access_token_str = access_token
+        refresh_token_str = refresh_token
+        
+    except Exception as e:
+        logger.error(f"Neon database integration error: {e}. Falling back to mock session.")
+        await db.rollback()
+        user_id_str = f"user_{phone.replace('+', '').replace(' ', '')}"
+        access_token_str = f"mock_access_token_{int(datetime.now(timezone.utc).timestamp())}"
+        refresh_token_str = "mock_refresh_token"
+
     return {
-        "userId": f"user_{phone.replace('+', '').replace(' ', '')}",
-        "accessToken": f"mock_access_token_{int(datetime.now(timezone.utc).timestamp())}",
-        "refreshToken": "mock_refresh_token",
+        "userId": user_id_str,
+        "accessToken": access_token_str,
+        "refreshToken": refresh_token_str,
         "isGuest": False,
         "role": role,
         "isIdentityVerified": True,
