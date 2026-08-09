@@ -363,7 +363,10 @@ class _ContractorPassportCard extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Row(
+                  Wrap(
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 4,
+                    runSpacing: 2,
                     children: [
                       Text(
                         '${summary.completedProjects} Projects',
@@ -372,18 +375,18 @@ class _ContractorPassportCard extends StatelessWidget {
                               ? const Color(0xFF64748B)
                               : const Color(0xFF94A3B8),
                           fontFamily: 'Inter',
-                          fontSize: 12,
+                          fontSize: 11,
                         ),
                       ),
-                      const Text(' • ', style: TextStyle(color: Color(0xFF64748B))),
+                      const Text('•', style: TextStyle(color: Color(0xFF64748B))),
                       Text(
-                        '${summary.activeDefects} Active Defects',
+                        '${summary.activeDefects} Active',
                         style: TextStyle(
                           color: summary.activeDefects > 0
                               ? const Color(0xFFEF4444)
                               : const Color(0xFF10B981),
                           fontFamily: 'Inter',
-                          fontSize: 12,
+                          fontSize: 11,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
