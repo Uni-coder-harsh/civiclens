@@ -1,18 +1,19 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
-
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:uuid/uuid.dart';
+import '../../../core/sensor/sensor_processing_service.dart';
 
 /// Result returned when a recording window completes.
 class RecordingResult {
   /// Path to the WAV file on disk (microphone audio).
   final String wavPath;
 
-  /// All z-axis accelerometer samples collected during the window.
+  /// All vertical dynamic accelerometer samples collected during the window (gravity removed).
   final List<double> accelZSamples;
 
   /// Approximate sample rate achieved (samples / elapsed seconds).
@@ -21,35 +22,47 @@ class RecordingResult {
   /// Duration of the recording window in milliseconds.
   final int durationMs;
 
+  final double latitude;
+  final double longitude;
+  final double accuracy;
+  final double speed;
+
   const RecordingResult({
     required this.wavPath,
     required this.accelZSamples,
     required this.actualSampleRateHz,
     required this.durationMs,
+    required this.latitude,
+    required this.longitude,
+    required this.accuracy,
+    required this.speed,
   });
 }
 
 /// Orchestrates a 30-second concurrent recording of:
 ///   • Microphone audio → WAV file on disk.
-///   • Accelerometer z-axis samples → in-memory list.
+///   • Accelerometer dynamic vertical samples → in-memory list (gravity removed).
 ///
 /// Callers receive a [RecordingResult] when the window elapses.
-/// The WAV file must be uploaded as multipart — NOT inlined as JSON.
 class SensorRecorder {
   static const int _windowMs = 30000; // 30 second window
 
   final _audioRecorder = AudioRecorder();
   StreamSubscription<AccelerometerEvent>? _accelSub;
+  StreamSubscription<GyroscopeEvent>? _gyroSub;
 
   final List<double> _accelZ = [];
   DateTime? _startTime;
 
+  // GPS coordinates
+  double _latitude = 0.0;
+  double _longitude = 0.0;
+  double _accuracy = 0.0;
+  double _speed = 0.0;
+
   bool get isRecording => _accelSub != null;
 
   /// Start a 30-second concurrent audio + accelerometer recording.
-  ///
-  /// Returns a [RecordingResult] after [_windowMs] ms, or sooner if
-  /// [stop] is called.
   Future<RecordingResult> record() async {
     final dir = await getTemporaryDirectory();
     final wavPath = '${dir.path}/bridge_accel_${const Uuid().v4()}.wav';
@@ -68,14 +81,24 @@ class SensorRecorder {
     _accelZ.clear();
     _startTime = DateTime.now();
 
-    final completer = Completer<RecordingResult>();
+    // Query GPS asynchronously so we don't block starting the sensors
+    _fetchGpsLocation();
 
-    // Start accelerometer at fastest available rate.
+    final completer = Completer<RecordingResult>();
+    final sensorService = SensorProcessingService();
+
+    // Start accelerometer and compute dynamic vertical component using gravity projection
     _accelSub = accelerometerEventStream(
       samplingPeriod: SensorInterval.normalInterval,
     ).listen((event) {
-      _accelZ.add(event.z);
+      final zDyn = sensorService.getVerticalDynamicAcceleration(event.x, event.y, event.z);
+      _accelZ.add(zDyn);
     });
+
+    // Start gyroscope if available to satisfy multisensor capture
+    _gyroSub = gyroscopeEventStream(
+      samplingPeriod: SensorInterval.normalInterval,
+    ).listen((_) {});
 
     // Auto-stop after window.
     Future.delayed(Duration(milliseconds: _windowMs), () {
@@ -85,6 +108,29 @@ class SensorRecorder {
     });
 
     return completer.future;
+  }
+
+  Future<void> _fetchGpsLocation() async {
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 4),
+      );
+      _latitude = pos.latitude;
+      _longitude = pos.longitude;
+      _accuracy = pos.accuracy;
+      _speed = pos.speed;
+    } catch (_) {
+      try {
+        final last = await Geolocator.getLastKnownPosition();
+        if (last != null) {
+          _latitude = last.latitude;
+          _longitude = last.longitude;
+          _accuracy = last.accuracy;
+          _speed = last.speed;
+        }
+      } catch (_) {}
+    }
   }
 
   /// Manually stop the recording before the 30-second window elapses.
@@ -103,13 +149,14 @@ class SensorRecorder {
   ) async {
     _accelSub?.cancel();
     _accelSub = null;
+    _gyroSub?.cancel();
+    _gyroSub = null;
 
     String finalPath = wavPath;
     try {
       final recorded = await _audioRecorder.stop();
       if (recorded != null) finalPath = recorded;
     } catch (_) {
-      // If recorder wasn't started yet (edge case), create an empty WAV stub.
       await _writeEmptyWav(wavPath);
     }
 
@@ -127,6 +174,10 @@ class SensorRecorder {
         accelZSamples: List.unmodifiable(_accelZ),
         actualSampleRateHz: sampleRate,
         durationMs: elapsed,
+        latitude: _latitude,
+        longitude: _longitude,
+        accuracy: _accuracy,
+        speed: _speed,
       ));
     }
 

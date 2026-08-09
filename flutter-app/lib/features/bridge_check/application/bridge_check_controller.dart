@@ -194,12 +194,12 @@ class BridgeCheckController extends Notifier<BridgeCheckState> {
       // Build VibrationPayload.
       final session = ref.read(authSessionProvider);
       final capture = GeoCapture(
-        latitude: 0,
-        longitude: 0,
+        latitude: recording.latitude,
+        longitude: recording.longitude,
         altitudeMeters: 0,
-        accuracyMeters: 0,
+        accuracyMeters: recording.accuracy,
         bearingDegrees: 0,
-        speedMps: 0,
+        speedMps: recording.speed,
         capturedAtUtc: DateTime.now().toUtc(),
       );
 
