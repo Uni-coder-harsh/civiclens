@@ -63,6 +63,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // Allow splash to always load
       if (path == '/splash') return null;
 
+      // If user is already authenticated, redirect away from entry/auth pages
+      final isAuth = session.isAuthenticated && !session.isGuest;
+      if (isAuth && (path == '/entry' || path.startsWith('/entry/'))) {
+        return '/home/dashboard';
+      }
+
       // RBAC guards for officer private portal routes
       if (path.startsWith('/officer/')) {
         if (!session.isOfficer) {
