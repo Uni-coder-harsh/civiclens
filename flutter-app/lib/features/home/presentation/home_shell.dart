@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../features/witness/presentation/witness_nudge_bar.dart';
 
-/// Bottom-tab shell for the Home section (/home/map, /home/activity, /home/profile).
+/// Bottom-tab shell for the Home section (/home/dashboard, /home/activity, /home/profile).
 class HomeShell extends ConsumerWidget {
   final StatefulNavigationShell navigationShell;
 

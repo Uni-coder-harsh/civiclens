@@ -148,14 +148,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           StatefulShellBranch(
             routes: [
               GoRoute(
-                path: '/home/map',
-                builder: (context, state) => const MapPage(),
-              ),
-            ],
-          ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
                 path: '/home/activity',
                 builder: (context, state) => const DraftQueuePage(),
               ),
@@ -170,6 +162,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             ],
           ),
         ],
+      ),
+
+      // Map Page as a standalone route pushed on top of the shell
+      GoRoute(
+        path: '/map',
+        builder: (context, state) => const MapPage(),
       ),
 
       // Capture
