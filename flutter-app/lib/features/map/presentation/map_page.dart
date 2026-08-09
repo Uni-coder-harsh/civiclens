@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../../../core/config/feature_flags.dart';
 import '../../../features/auth/application/auth_controller.dart';
@@ -82,14 +83,24 @@ class _MapNotifier extends Notifier<_MapViewState> {
     state = state.copyWith(showCoverage: !state.showCoverage);
   }
 
-  void refresh() {
-    if (_lastCenter != null) {
-      _fetchDefects(
-        _lastCenter!.latitude,
-        _lastCenter!.longitude,
+  Future<void> refresh([MapController? controller]) async {
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 5),
       );
-    } else {
-      _fetchDefects(28.6139, 77.2090); // New Delhi
+      final center = LatLng(position.latitude, position.longitude);
+      _lastCenter = center;
+      if (controller != null) {
+        controller.move(center, 13);
+      }
+      await _fetchDefects(position.latitude, position.longitude);
+    } catch (_) {
+      if (_lastCenter != null) {
+        await _fetchDefects(_lastCenter!.latitude, _lastCenter!.longitude);
+      } else {
+        await _fetchDefects(28.6139, 77.2090); // New Delhi
+      }
     }
   }
 }
@@ -113,7 +124,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(_mapNotifierProvider.notifier).refresh();
+      ref.read(_mapNotifierProvider.notifier).refresh(_mapController);
     });
   }
 
@@ -311,7 +322,7 @@ class _MapPageState extends ConsumerState<MapPage> {
             child: _MapControlButton(
               icon: Icons.my_location_rounded,
               onTap: () {
-                _mapController.move(const LatLng(28.6139, 77.2090), 13);
+                ref.read(_mapNotifierProvider.notifier).refresh(_mapController);
               },
             ),
           ),

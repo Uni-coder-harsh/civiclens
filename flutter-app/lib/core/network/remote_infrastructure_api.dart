@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:dio/dio.dart';
 
 import '../../shared/contractor.dart';
@@ -18,10 +19,15 @@ class RemoteInfrastructureApi implements InfrastructureApi {
     ReportPayload payload, {
     void Function(int sent, int total)? onProgress,
   }) async {
+    final imagePath = payload.imagePath;
+    final fileExists = imagePath.isNotEmpty &&
+        !imagePath.startsWith('mock://') &&
+        File(imagePath).existsSync();
+
     final formData = FormData.fromMap({
       'payload': jsonEncode(payload.toJson()),
-      if (payload.imagePath.isNotEmpty)
-        'image': await MultipartFile.fromFile(payload.imagePath, filename: 'defect_image.jpg'),
+      if (fileExists)
+        'image': await MultipartFile.fromFile(imagePath, filename: 'defect_image.jpg'),
     });
 
     final response = await dio.post(

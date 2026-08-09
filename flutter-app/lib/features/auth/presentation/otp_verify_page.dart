@@ -69,7 +69,7 @@ class _OtpVerifyPageState extends ConsumerState<OtpVerifyPage> {
           .read(authControllerProvider.notifier)
           .verifyOtp(widget.phone, otp);
       if (mounted) {
-        context.go('/home/map');
+        context.go('/home/dashboard');
       }
     } catch (e) {
       if (mounted) {

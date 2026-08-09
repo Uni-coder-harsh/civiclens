@@ -90,7 +90,7 @@ class _EmailLoginPageState extends ConsumerState<EmailLoginPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Successfully signed in.')),
           );
-          context.go('/home/map');
+          context.go('/home/dashboard');
         }
       } else {
         throw Exception('Session was not verified. Please register and complete OTP.');
@@ -471,7 +471,7 @@ class _EmailVerifyOtpPageState extends ConsumerState<EmailVerifyOtpPage> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Account verified successfully!')),
           );
-          context.go('/home/map');
+          context.go('/home/dashboard');
         }
       } else {
         throw Exception('Account verification incomplete.');

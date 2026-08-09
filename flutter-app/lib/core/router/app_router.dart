@@ -9,6 +9,7 @@ import '../../features/auth/presentation/email_auth_pages.dart';
 import '../../features/auth/presentation/otp_phone_page.dart';
 import '../../features/auth/presentation/otp_verify_page.dart';
 import '../../features/home/presentation/home_shell.dart';
+import '../../features/home/presentation/home_dashboard_page.dart';
 import '../../features/capture/presentation/camera_page.dart';
 import '../../features/capture/presentation/preview_review_page.dart';
 import '../../features/capture/data/capture_repository.dart';
@@ -65,7 +66,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // RBAC guards for officer private portal routes
       if (path.startsWith('/officer/')) {
         if (!session.isOfficer) {
-          return '/home/map';
+          return '/home/dashboard';
         }
       }
 
@@ -73,7 +74,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // Note: /contractors, /contractor-search, /contractors/:id are public accountability records
       if (path.startsWith('/contractor/')) {
         if (!session.isContractor) {
-          return '/home/map';
+          return '/home/dashboard';
         }
       }
 
@@ -136,6 +137,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state, navigationShell) =>
             HomeShell(navigationShell: navigationShell),
         branches: [
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/home/dashboard',
+                builder: (context, state) => const HomeDashboardPage(),
+              ),
+            ],
+          ),
           StatefulShellBranch(
             routes: [
               GoRoute(

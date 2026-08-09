@@ -300,8 +300,10 @@ def upload_file_to_storage(file_data: bytes, object_name: str, content_type: str
         
         # Construct public URL
         protocol = "https" if settings.MINIO_SECURE else "http"
-        # If it's a supabase endpoint, clean up URL construction
         endpoint = settings.MINIO_ENDPOINT
+        if "supabase.co" in endpoint:
+            project_ref = endpoint.replace("https://", "").replace("http://", "").split(".")[0]
+            return f"https://{project_ref}.supabase.co/storage/v1/object/public/{settings.MINIO_BUCKET_NAME}/{object_name}"
         return f"{protocol}://{endpoint}/{settings.MINIO_BUCKET_NAME}/{object_name}"
     except Exception as e:
         logger.error(f"Failed to upload file to object storage: {e}")

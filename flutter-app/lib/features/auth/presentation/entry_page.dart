@@ -114,7 +114,7 @@ class EntryPage extends ConsumerWidget {
                     await ref
                         .read(authControllerProvider.notifier)
                         .signInAsGuest();
-                    if (context.mounted) context.go('/home/map');
+                    if (context.mounted) context.go('/home/dashboard');
                   },
                   icon: const Icon(Icons.person_outline_rounded, size: 18, color: Color(0xFF94A3B8)),
                   label: const Text(
