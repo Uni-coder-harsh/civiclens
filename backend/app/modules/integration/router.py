@@ -17,6 +17,7 @@ from app.modules.auth.model import User, Role, UserSession
 from app.modules.organizations.model import Organization, OrganizationMembership
 from app.modules.infrastructure.model import InfrastructureAsset
 from app.modules.inspections.model import Inspection, InspectionItem, InspectionMedia
+from app.modules.system.model import AuditLog
 from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token
 from app.core.config import settings
 from app.core.logging import logger
@@ -428,6 +429,23 @@ async def upload_infrastructure_report(request: Request, db: AsyncSession = Depe
             mime_type=mime_type
         )
         db.add(inspection_media)
+        
+        # 5.5. Write Audit Log for the report creation
+        audit = AuditLog(
+            id=uuid.uuid4(),
+            user_id=inspector_id,
+            action="CREATE_REPORT",
+            table_name="inspections",
+            record_id=inspection.id,
+            new_values={
+                "report_id": payload.id,
+                "category": payload.category,
+                "severity": payload.severity,
+                "description": payload.description
+            },
+            ip_address=request.client.host if request.client else None
+        )
+        db.add(audit)
         
         # 6. Commit transaction to Neon DB
         await db.commit()
@@ -1246,6 +1264,21 @@ async def auth_register(body: RegisterRequest, db: AsyncSession = Depends(get_db
     store.otps[email_lower] = otp_code
     store.save()
     
+    # 4.5. Write Audit Log
+    audit = AuditLog(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        action="REGISTER_USER",
+        table_name="users",
+        record_id=user.id,
+        new_values={
+            "email": email_lower,
+            "full_name": body.full_name,
+            "role": body.role
+        }
+    )
+    db.add(audit)
+    
     # 5. Commit transaction
     await db.commit()
     
@@ -1333,6 +1366,22 @@ async def auth_email_verify(body: EmailVerifyRequest, db: AsyncSession = Depends
         expires_at=datetime.now(timezone.utc) + timedelta(days=7)
     )
     db.add(user_session)
+    
+    # 4.5. Write Audit Log
+    audit = AuditLog(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        action="VERIFY_EMAIL",
+        table_name="users",
+        record_id=user.id,
+        new_values={
+            "email": email_lower,
+            "is_verified": True
+        }
+    )
+    db.add(audit)
+    
+    # 5. Commit session
     await db.commit()
     
     return {

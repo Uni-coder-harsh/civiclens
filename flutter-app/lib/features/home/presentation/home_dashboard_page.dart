@@ -1,9 +1,31 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
 import '../../../core/auth/auth_session.dart';
 import '../../auth/application/auth_controller.dart';
 import '../../profile/application/profile_controller.dart';
+import '../../map/data/map_repository.dart';
+import '../../../shared/defect.dart';
+import '../../../shared/report_payload.dart';
+
+/// Dynamic FutureProvider that queries the backend database for nearby defects
+/// based on the user's live GPS coordinates.
+final dashboardDefectsProvider = FutureProvider.autoDispose<List<NearbyDefect>>((ref) async {
+  try {
+    final position = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+      timeLimit: const Duration(seconds: 4),
+    );
+    final repo = ref.read(mapRepositoryProvider);
+    return await repo.fetchNearbyDefects(position.latitude, position.longitude, 5000);
+  } catch (_) {
+    // Fallback to static coordinates (New Delhi) if location services or permissions fail
+    final repo = ref.read(mapRepositoryProvider);
+    return await repo.fetchNearbyDefects(28.6139, 77.2090, 5000);
+  }
+});
 
 class HomeDashboardPage extends ConsumerWidget {
   const HomeDashboardPage({super.key});
@@ -12,61 +34,66 @@ class HomeDashboardPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(authSessionProvider);
     final scoreAsync = ref.watch(profileControllerProvider);
+    final defectsAsync = ref.watch(dashboardDefectsProvider);
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
       body: SafeArea(
-        child: CustomScrollView(
-          physics: const BouncingScrollPhysics(),
-          slivers: [
-            // ── Welcome Banner Sliver ──
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Welcome back,',
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            fontSize: 14,
-                            color: const Color(0xFF94A3B8),
-                            fontWeight: FontWeight.w500,
+        child: RefreshIndicator(
+          onRefresh: () => ref.refresh(dashboardDefectsProvider.future),
+          color: const Color(0xFF4F46E5),
+          backgroundColor: const Color(0xFF1E293B),
+          child: CustomScrollView(
+            physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+            slivers: [
+              // ── Welcome Banner Sliver ──
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Welcome back,',
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 14,
+                              color: Color(0xFF94A3B8),
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
+                          const SizedBox(height: 4),
+                          Text(
+                            session.displayName ?? 'Citizen Reporter',
+                            style: const TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 24,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                      // Glassmorphic User Role Badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF4F46E5).withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: const Color(0xFF4F46E5).withOpacity(0.3)),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          session.displayName ?? 'Citizen Reporter',
+                        child: Text(
+                          session.role.name.toUpperCase(),
                           style: const TextStyle(
                             fontFamily: 'Inter',
-                            fontSize: 24,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                            letterSpacing: -0.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                    // Glassmorphic User Role Badge
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF4F46E5).withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFF4F46E5).withOpacity(0.3)),
-                      ),
-                      child: Text(
-                        session.role.name.toUpperCase(),
-                        style: const TextStyle(
-                          fontFamily: 'Inter',
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xFF818CF8),
-                          letterSpacing: 1.0,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF818CF8),
+                            letterSpacing: 1.0,
                         ),
                       ),
                     ),
@@ -214,10 +241,7 @@ class HomeDashboardPage extends ConsumerWidget {
                           iconColor: const Color(0xFF10B981),
                           gradientColors: const [Color(0xFF143A2F), Color(0xFF0F2620)],
                           borderColor: const Color(0xFF10B981).withOpacity(0.3),
-                          onTap: () {
-                            // Programmatically trigger map tab branch
-                            StatefulNavigationShell.of(context).goBranch(1);
-                          },
+                          onTap: () => context.push('/map'),
                         ),
                         _HubCard(
                           title: 'Contractors',
@@ -278,13 +302,13 @@ class HomeDashboardPage extends ConsumerWidget {
                               letterSpacing: 1.5,
                             ),
                           ),
-                          Text(
+                          const Text(
                             '72% Resolved',
                             style: TextStyle(
                               fontFamily: 'Inter',
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
-                              color: const Color(0xFF10B981),
+                              color: Color(0xFF10B981),
                             ),
                           ),
                         ],
@@ -302,7 +326,7 @@ class HomeDashboardPage extends ConsumerWidget {
                       const SizedBox(height: 14),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
+                        children: const [
                           _StatItem(label: 'Total Fixed', value: '142'),
                           _StatItem(label: 'In Progress', value: '38'),
                           _StatItem(label: 'Open Claims', value: '16'),
@@ -319,7 +343,7 @@ class HomeDashboardPage extends ConsumerWidget {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
                 child: const Text(
-                  'RECENT CIVIC REPORTS',
+                  'RECENT CIVIC REPORTS (LIVE)',
                   style: TextStyle(
                     fontFamily: 'Inter',
                     fontSize: 11,
@@ -331,35 +355,95 @@ class HomeDashboardPage extends ConsumerWidget {
               ),
             ),
 
-            // ── Recent Activity List ──
-            SliverList(
-              delegate: SliverChildListDelegate([
-                _ActivityTile(
-                  category: 'Road Crack',
-                  location: 'Kothrud, Pune',
-                  status: 'Resolving',
-                  statusColor: const Color(0xFFF59E0B),
-                  icon: Icons.road_rounded,
-                  time: '2 hrs ago',
+            // ── Dynamic Recent Activity List ──
+            defectsAsync.when(
+              data: (defects) {
+                if (defects.isEmpty) {
+                  return const SliverToBoxAdapter(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+                      child: Center(
+                        child: Text(
+                          'No reports found in this area.',
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            color: Color(0xFF64748B),
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }
+                return SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      final defect = defects[index];
+                      Color statusColor;
+                      switch (defect.status) {
+                        case DefectStatus.resolved:
+                        case DefectStatus.closed:
+                          statusColor = const Color(0xFF10B981);
+                          break;
+                        case DefectStatus.inProgress:
+                        case DefectStatus.assigned:
+                          statusColor = const Color(0xFFF59E0B);
+                          break;
+                        case DefectStatus.rejected:
+                          statusColor = const Color(0xFFEF4444);
+                          break;
+                        default:
+                          statusColor = const Color(0xFF3B82F6);
+                      }
+                      
+                      String cleanCategory = defect.category.name;
+                      // Prettify category string
+                      if (cleanCategory.length > 1) {
+                        cleanCategory = cleanCategory[0].toUpperCase() + cleanCategory.substring(1);
+                      }
+
+                      return _ActivityTile(
+                        category: cleanCategory,
+                        location: 'Lat: ${defect.latitude.toStringAsFixed(5)}, Lng: ${defect.longitude.toStringAsFixed(5)}',
+                        status: defect.status.name,
+                        statusColor: statusColor,
+                        icon: defect.category == ReportCategory.bridge
+                            ? Icons.construction_rounded
+                            : Icons.warning_amber_rounded,
+                        time: defect.watermarkVerified ? 'Verified' : 'Unverified',
+                      );
+                    },
+                    childCount: defects.length > 5 ? 5 : defects.length, // Show up to 5 items on dashboard
+                  ),
+                );
+              },
+              loading: () => const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(vertical: 40),
+                  child: Center(
+                    child: CircularProgressIndicator(color: Color(0xFF4F46E5)),
+                  ),
                 ),
-                _ActivityTile(
-                  category: 'Severe Pothole',
-                  location: 'Kalyani Nagar, Pune',
-                  status: 'AI Verified',
-                  statusColor: const Color(0xFF3B82F6),
-                  icon: Icons.warning_amber_rounded,
-                  time: '5 hrs ago',
+              ),
+              error: (err, _) => SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+                  child: Center(
+                    child: Text(
+                      'Failed to load live reports: $err',
+                      style: const TextStyle(
+                        fontFamily: 'Inter',
+                        color: Color(0xFFEF4444),
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
                 ),
-                _ActivityTile(
-                  category: 'Bridge Expansion Gap',
-                  location: 'Shivajinagar Bridge',
-                  status: 'Completed',
-                  statusColor: const Color(0xFF10B981),
-                  icon: Icons.construction_rounded,
-                  time: '1 day ago',
-                ),
-                const SizedBox(height: 40),
-              ]),
+              ),
+            ),
+            
+            const SliverToBoxAdapter(
+              child: SizedBox(height: 40),
             ),
           ],
         ),
