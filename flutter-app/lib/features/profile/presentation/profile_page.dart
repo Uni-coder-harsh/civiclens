@@ -550,7 +550,7 @@ class _EditProfileDialogState extends ConsumerState<_EditProfileDialog> {
                 Text(
                   _uploadError!,
                   style: const TextStyle(color: Color(0xFFEF4444), fontSize: 12),
-                  textAlign: Center,
+                  textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
               ],

@@ -179,16 +179,18 @@ class _FlatnessIndicator extends StatelessWidget {
             size: 22,
           ),
           const SizedBox(width: 12),
-          Text(
-            isFlat
-                ? 'Phone flat on deck ✓'
-                : 'Place phone flat on bridge surface',
-            style: TextStyle(
-              color:
-                  isFlat ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
-              fontFamily: 'Inter',
-              fontWeight: FontWeight.w600,
-              fontSize: 14,
+          Expanded(
+            child: Text(
+              isFlat
+                  ? 'Phone flat on deck ✓'
+                  : 'Place phone flat on bridge surface',
+              style: TextStyle(
+                color:
+                    isFlat ? const Color(0xFF10B981) : const Color(0xFFF59E0B),
+                fontFamily: 'Inter',
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+              ),
             ),
           ),
         ],
