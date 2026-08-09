@@ -11,6 +11,7 @@ class AuthSession {
   final String? phoneNumber;
   final String? displayName;
   final String? email;
+  final String? avatarUrl;
 
   const AuthSession({
     required this.userId,
@@ -22,6 +23,7 @@ class AuthSession {
     this.phoneNumber,
     this.displayName,
     this.email,
+    this.avatarUrl,
   });
 
   /// Factory constructor for an anonymous guest session.
@@ -60,6 +62,7 @@ class AuthSession {
       phoneNumber: phoneNumber ?? this.phoneNumber,
       displayName: displayName ?? this.displayName,
       email: email ?? this.email,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
     );
   }
 
@@ -77,6 +80,7 @@ class AuthSession {
       phoneNumber: json['phoneNumber'] as String?,
       displayName: json['displayName'] as String?,
       email: json['email'] as String?,
+      avatarUrl: json['avatarUrl'] as String?,
     );
   }
 
@@ -90,6 +94,7 @@ class AuthSession {
         'phoneNumber': phoneNumber,
         'displayName': displayName,
         'email': email,
+        'avatarUrl': avatarUrl,
       };
 
   @override

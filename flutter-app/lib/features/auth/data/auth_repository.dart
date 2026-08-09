@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
@@ -18,6 +19,14 @@ abstract class AuthRepository {
   Future<AuthSession> switchDemoRole(UserRole role);
   Future<void> signOut();
   Future<AuthSession?> getCurrentSession();
+  Future<AuthSession> updateProfile({
+    required String userId,
+    String? displayName,
+    String? email,
+    String? phoneNumber,
+    String? avatarUrl,
+  });
+  Future<String> uploadAvatar(String userId, String filePath);
 }
 
 /// Mock implementation of [AuthRepository] for demo and offline builds.
@@ -195,6 +204,29 @@ class MockAuthRepository implements AuthRepository {
         return 'Verified Citizen';
     }
   }
+
+  @override
+  Future<AuthSession> updateProfile({
+    required String userId,
+    String? displayName,
+    String? email,
+    String? phoneNumber,
+    String? avatarUrl,
+  }) async {
+    final current = await getCurrentSession() ?? AuthSession.guest();
+    final updated = current.copyWith(
+      displayName: displayName,
+      email: email,
+      phoneNumber: phoneNumber,
+    );
+    await _persist(updated);
+    return updated;
+  }
+
+  @override
+  Future<String> uploadAvatar(String userId, String filePath) async {
+    return "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&w=150&h=150&q=80";
+  }
 }
 
 /// Remote implementation of [AuthRepository] communicating with the backend.
@@ -346,5 +378,46 @@ class RemoteAuthRepository implements AuthRepository {
   Future<void> _persist(AuthSession session) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_sessionKey, jsonEncode(session.toJson()));
+  }
+
+  @override
+  Future<AuthSession> updateProfile({
+    required String userId,
+    String? displayName,
+    String? email,
+    String? phoneNumber,
+    String? avatarUrl,
+  }) async {
+    final response = await dio.post(
+      '/v1/auth/profile/update',
+      data: {
+        'userId': userId,
+        'displayName': displayName,
+        'email': email,
+        'phoneNumber': phoneNumber,
+        'avatarUrl': avatarUrl,
+      },
+    );
+    final session = AuthSession.fromJson(response.data as Map<String, dynamic>);
+    await _persist(session);
+    return session;
+  }
+
+  @override
+  Future<String> uploadAvatar(String userId, String filePath) async {
+    final file = File(filePath);
+    final fileName = filePath.split('/').last;
+    
+    final formData = FormData.fromMap({
+      'userId': userId,
+      'file': await MultipartFile.fromFile(filePath, filename: fileName),
+    });
+    
+    final response = await dio.post(
+      '/v1/auth/profile/avatar',
+      data: formData,
+    );
+    
+    return (response.data as Map<String, dynamic>)['avatarUrl'] as String;
   }
 }

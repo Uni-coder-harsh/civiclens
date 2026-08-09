@@ -96,11 +96,37 @@ class AuthController extends AsyncNotifier<AuthSession?> {
       () => ref.read(authRepositoryProvider).switchDemoRole(targetRole),
     );
   }
-
   Future<void> signOut() async {
     state = const AsyncLoading();
     await ref.read(authRepositoryProvider).signOut();
     state = const AsyncData(null);
+  }
+
+  Future<void> updateProfile({
+    String? displayName,
+    String? email,
+    String? phoneNumber,
+    String? avatarUrl,
+  }) async {
+    final current = state.value;
+    if (current == null) return;
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() async {
+      final updated = await ref.read(authRepositoryProvider).updateProfile(
+        userId: current.userId,
+        displayName: displayName,
+        email: email,
+        phoneNumber: phoneNumber,
+        avatarUrl: avatarUrl,
+      );
+      return updated;
+    });
+  }
+
+  Future<String> uploadAvatar(String filePath) async {
+    final current = state.value;
+    if (current == null) throw Exception("User not signed in.");
+    return await ref.read(authRepositoryProvider).uploadAvatar(current.userId, filePath);
   }
 }
 

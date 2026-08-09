@@ -987,6 +987,8 @@ class AuthSessionResponseSchema(BaseModel):
     isIdentityVerified: bool
     phoneNumber: Optional[str] = None
     displayName: Optional[str] = None
+    email: Optional[str] = None
+    avatarUrl: Optional[str] = None
 
 @router.post("/auth/guest", response_model=AuthSessionResponseSchema)
 async def auth_guest():
@@ -1099,6 +1101,8 @@ async def auth_otp_verify(body: OTPVerifyRequest, db: AsyncSession = Depends(get
         user_id_str = str(db_user.id)
         access_token_str = access_token
         refresh_token_str = refresh_token
+        email_str = db_user.email
+        avatar_url_str = db_user.avatar_url
         
     except Exception as e:
         logger.error(f"Neon database integration error: {e}. Falling back to mock session.")
@@ -1106,6 +1110,8 @@ async def auth_otp_verify(body: OTPVerifyRequest, db: AsyncSession = Depends(get
         user_id_str = f"user_{phone.replace('+', '').replace(' ', '')}"
         access_token_str = f"mock_access_token_{int(datetime.now(timezone.utc).timestamp())}"
         refresh_token_str = "mock_refresh_token"
+        email_str = f"phone_{phone.replace('+', '').replace(' ', '')}@civiclens.local"
+        avatar_url_str = None
 
     return {
         "userId": user_id_str,
@@ -1115,7 +1121,9 @@ async def auth_otp_verify(body: OTPVerifyRequest, db: AsyncSession = Depends(get
         "role": role,
         "isIdentityVerified": True,
         "phoneNumber": phone,
-        "displayName": display_name
+        "displayName": display_name,
+        "email": email_str,
+        "avatarUrl": avatar_url_str
     }
 
 @router.post("/auth/switch-role", response_model=AuthSessionResponseSchema)
@@ -1393,7 +1401,8 @@ async def auth_email_verify(body: EmailVerifyRequest, db: AsyncSession = Depends
         "isIdentityVerified": True,
         "phoneNumber": user.phone_number,
         "displayName": user.full_name,
-        "email": user.email
+        "email": user.email,
+        "avatarUrl": user.avatar_url
     }
 
 @router.post("/auth/email/login", response_model=AuthSessionResponseSchema)
@@ -1489,7 +1498,8 @@ async def auth_email_login(body: EmailLoginRequest, db: AsyncSession = Depends(g
         "isIdentityVerified": True,
         "phoneNumber": user.phone_number,
         "displayName": user.full_name,
-        "email": user.email
+        "email": user.email,
+        "avatarUrl": user.avatar_url
     }
 
 @router.post("/auth/password/forgot")
@@ -1581,4 +1591,131 @@ async def auth_password_reset(body: ResetPasswordRequest, db: AsyncSession = Dep
         store.save()
         
     return {"message": "Password reset successfully. You can now login with your new password."}
+
+
+class UpdateProfileRequest(BaseModel):
+    userId: str
+    displayName: Optional[str] = None
+    email: Optional[str] = None
+    phoneNumber: Optional[str] = None
+    avatarUrl: Optional[str] = None
+
+
+@router.post("/auth/profile/update", response_model=AuthSessionResponseSchema)
+async def update_profile(body: UpdateProfileRequest, db: AsyncSession = Depends(get_db_session)):
+    user_uuid = None
+    try:
+        user_uuid = uuid.UUID(body.userId)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user ID format.")
+
+    stmt = select(User).where(User.id == user_uuid)
+    res = await db.execute(stmt)
+    user = res.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+
+    # Update columns
+    if body.displayName is not None:
+        user.full_name = body.displayName.strip()
+    if body.email is not None:
+        user.email = body.email.strip().lower()
+    if body.phoneNumber is not None:
+        user.phone_number = body.phoneNumber.strip()
+    if body.avatarUrl is not None:
+        user.avatar_url = body.avatarUrl.strip()
+
+    # Log to audit_logs
+    audit = AuditLog(
+        id=uuid.uuid4(),
+        user_id=user.id,
+        action="UPDATE_PROFILE",
+        table_name="users",
+        record_id=user.id,
+        new_values={
+            "full_name": user.full_name,
+            "email": user.email,
+            "phone_number": user.phone_number,
+            "avatar_url": user.avatar_url
+        }
+    )
+    db.add(audit)
+    await db.commit()
+
+    # Fetch role name
+    stmt = select(Role).where(Role.id == user.role_id)
+    res = await db.execute(stmt)
+    db_role = res.scalar_one_or_none()
+    role_name = db_role.name if db_role else "INSPECTOR"
+
+    frontend_role = "citizen"
+    if role_name == "ORG_ADMIN":
+        frontend_role = "contractor"
+    elif role_name == "INSPECTOR":
+        if "officer" in user.email:
+            frontend_role = "officer"
+        else:
+            frontend_role = "citizen"
+
+    return {
+        "userId": str(user.id),
+        "accessToken": "",
+        "refreshToken": "",
+        "isGuest": False,
+        "role": frontend_role,
+        "isIdentityVerified": True,
+        "phoneNumber": user.phone_number,
+        "displayName": user.full_name,
+        "email": user.email
+    }
+
+
+@router.post("/auth/profile/avatar")
+async def upload_avatar(
+    userId: str = Form(...),
+    file: UploadFile = File(...)
+):
+    # File type check
+    allowed_types = ["image/jpeg", "image/png", "image/webp", "image/jpg"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid file type {file.content_type}. Only JPEG, PNG, and WEBP are allowed."
+        )
+
+    # Size limit check (5 MB)
+    max_size = 5 * 1024 * 1024
+    file_bytes = await file.read()
+    if len(file_bytes) > max_size:
+        raise HTTPException(
+            status_code=400,
+            detail="File size exceeds the 5MB limit."
+        )
+
+    # Compress / optimize image size using PIL if needed
+    try:
+        from PIL import Image
+        import io
+        img = Image.open(io.BytesIO(file_bytes))
+        
+        # Resize if width or height is > 1024px to reduce size
+        if img.width > 1024 or img.height > 1024:
+            img.thumbnail((1024, 1024))
+            
+        output = io.BytesIO()
+        img.save(output, format="JPEG", quality=80)
+        file_bytes = output.getvalue()
+    except Exception as img_err:
+        logger.warning(f"PIL compression skipped or failed: {img_err}")
+
+    # Upload to Supabase/MinIO
+    try:
+        object_name = f"avatars/{userId}_{int(datetime.now(timezone.utc).timestamp())}.jpg"
+        avatar_url = upload_file_to_storage(file_bytes, object_name, "image/jpeg")
+        return {"avatarUrl": avatar_url}
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to upload avatar: {str(e)}"
+        )
 
