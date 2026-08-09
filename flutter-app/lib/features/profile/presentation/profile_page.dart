@@ -356,8 +356,12 @@ class HomeProfilePage extends ConsumerWidget {
 
                 const SizedBox(height: 24),
 
-                // ── Phase 2 Quick Actions ───────────────────────────────
                 _Phase2QuickActions(session: session),
+
+                const SizedBox(height: 24),
+
+                // ── Account Details Card ──
+                _AccountDetailsCard(session: session),
 
                 const SizedBox(height: 24),
               ]),
@@ -912,5 +916,114 @@ class _SettingsBottomSheet extends ConsumerWidget {
       case UserRole.admin:
         return const Color(0xFFDC2626);
     }
+  }
+}
+
+class _AccountDetailsCard extends StatelessWidget {
+  final AuthSession session;
+
+  const _AccountDetailsCard({required this.session});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Theme.of(context).colorScheme.surface),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Account Information',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: Theme.of(context).colorScheme.onSurface,
+              fontFamily: 'Inter',
+            ),
+          ),
+          const SizedBox(height: 16),
+          _AccountInfoRow(
+            icon: Icons.person_rounded,
+            label: 'Full Name',
+            value: session.displayName ?? 'Citizen Reporter',
+          ),
+          const Divider(color: Color(0xFF334155), height: 24),
+          _AccountInfoRow(
+            icon: Icons.email_rounded,
+            label: 'Email Address',
+            value: session.email ?? 'Not provided',
+          ),
+          const Divider(color: Color(0xFF334155), height: 24),
+          _AccountInfoRow(
+            icon: Icons.phone_rounded,
+            label: 'Phone Number',
+            value: session.phoneNumber != null && session.phoneNumber!.isNotEmpty
+                ? '+91 ${session.phoneNumber}'
+                : 'Not linked',
+          ),
+          const Divider(color: Color(0xFF334155), height: 24),
+          _AccountInfoRow(
+            icon: Icons.verified_user_rounded,
+            label: 'Status',
+            value: session.isGuest
+                ? 'Guest Access'
+                : 'Verified Citizen (Active)',
+            valueColor: session.isGuest ? const Color(0xFFF59E0B) : const Color(0xFF10B981),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AccountInfoRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  const _AccountInfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.valueColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, color: const Color(0xFF94A3B8), size: 20),
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Color(0xFF64748B),
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: valueColor ?? Colors.white,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
   }
 }

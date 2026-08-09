@@ -156,9 +156,8 @@ class _MapPageState extends ConsumerState<MapPage> {
             ),
             children: [
               TileLayer(
-                urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+                urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
                 userAgentPackageName: 'com.civiclens.app',
-                subdomains: const ['a', 'b', 'c', 'd'],
                 retinaMode: RetinaMode.isHighDensity(context),
               ),
               MarkerLayer(
@@ -183,12 +182,12 @@ class _MapPageState extends ConsumerState<MapPage> {
                     child: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.surface.withOpacity(0.92),
+                        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
                         shape: BoxShape.circle,
                         border: Border.all(color: const Color(0xFF334155)),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.3),
+                            color: Colors.black.withValues(alpha: 0.3),
                             blurRadius: 8,
                             offset: const Offset(0, 2),
                           ),
@@ -204,12 +203,12 @@ class _MapPageState extends ConsumerState<MapPage> {
                     padding:
                       const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.surface.withOpacity(0.92),
+                    color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: const Color(0xFF334155)),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.3),
+                        color: Colors.black.withValues(alpha: 0.3),
                         blurRadius: 8,
                         offset: const Offset(0, 2),
                       ),
@@ -271,8 +270,8 @@ class _MapPageState extends ConsumerState<MapPage> {
                         const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
                       color: mapState.showCoverage
-                          ? const Color(0xFF4F46E5).withOpacity(0.9)
-                          : const Color(0xFF1E293B).withOpacity(0.92),
+                          ? const Color(0xFF4F46E5).withValues(alpha: 0.9)
+                          : const Color(0xFF1E293B).withValues(alpha: 0.92),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
                         color: mapState.showCoverage
@@ -321,7 +320,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                       center: Alignment.center,
                       radius: 0.8,
                       colors: [
-                        const Color(0xFF4F46E5).withOpacity(0.08),
+                        const Color(0xFF4F46E5).withValues(alpha: 0.08),
                         Colors.transparent,
                       ],
                     ),
@@ -374,10 +373,10 @@ class _MapPageState extends ConsumerState<MapPage> {
                       color: Theme.of(context)
                           .colorScheme
                           .surface
-                          .withOpacity(0.95),
+                          .withValues(alpha: 0.95),
                       borderRadius: BorderRadius.circular(28),
                       border: Border.all(
-                        color: const Color(0xFF818CF8).withOpacity(0.4),
+                        color: const Color(0xFF818CF8).withValues(alpha: 0.4),
                         width: 1.2,
                       ),
                       boxShadow: [
@@ -427,7 +426,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                         borderRadius: BorderRadius.circular(28),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF4F46E5).withOpacity(0.5),
+                            color: const Color(0xFF4F46E5).withValues(alpha: 0.5),
                             blurRadius: 18,
                             spreadRadius: 1,
                             offset: const Offset(0, 4),
@@ -547,12 +546,12 @@ class _MapControlButton extends StatelessWidget {
         width: 44,
         height: 44,
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface.withOpacity(0.92),
+          color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
           shape: BoxShape.circle,
           border: Border.all(color: const Color(0xFF334155)),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.3),
+              color: Colors.black.withValues(alpha: 0.3),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
@@ -610,7 +609,7 @@ class _DefectBottomSheet extends StatelessWidget {
                     color: const Color(0xFF334155),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: _statusColor(defect.status).withOpacity(0.4),
+                      color: _statusColor(defect.status).withValues(alpha: 0.4),
                       width: 2,
                     ),
                   ),
@@ -751,9 +750,9 @@ class _StatusPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.15),
+        color: color.withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.4)),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Text(
         status.name
@@ -799,9 +798,9 @@ class _VerifiedBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
-        color: const Color(0xFF22C55E).withOpacity(0.15),
+        color: const Color(0xFF22C55E).withValues(alpha: 0.15),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF22C55E).withOpacity(0.4)),
+        border: Border.all(color: const Color(0xFF22C55E).withValues(alpha: 0.4)),
       ),
       child: const Row(
         mainAxisSize: MainAxisSize.min,
@@ -829,7 +828,7 @@ class _PinLegend extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface.withOpacity(0.92),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: const Color(0xFF334155)),
       ),
@@ -917,9 +916,9 @@ class _RoleActionPill extends ConsumerWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.14),
+          color: color.withValues(alpha: 0.14),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: color.withOpacity(0.4), width: 1),
+          border: Border.all(color: color.withValues(alpha: 0.4), width: 1),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -1129,10 +1128,10 @@ class _FieldModeCard extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: color.withOpacity(isLight ? 0.08 : 0.07),
+          color: color.withValues(alpha: isLight ? 0.08 : 0.07),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: color.withOpacity(isLight ? 0.35 : 0.24),
+            color: color.withValues(alpha: isLight ? 0.35 : 0.24),
             width: 1,
           ),
         ),
@@ -1142,7 +1141,7 @@ class _FieldModeCard extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: color.withOpacity(isLight ? 0.14 : 0.16),
+                color: color.withValues(alpha: isLight ? 0.14 : 0.16),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: color, size: 22),
@@ -1171,7 +1170,7 @@ class _FieldModeCard extends StatelessWidget {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: color.withOpacity(isLight ? 0.15 : 0.2),
+                          color: color.withValues(alpha: isLight ? 0.15 : 0.2),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
@@ -1202,7 +1201,7 @@ class _FieldModeCard extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             Icon(Icons.arrow_forward_ios_rounded,
-                color: color.withOpacity(0.6), size: 14),
+                color: color.withValues(alpha: 0.6), size: 14),
           ],
         ),
       ),

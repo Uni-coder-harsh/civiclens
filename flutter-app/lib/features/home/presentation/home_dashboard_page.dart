@@ -82,9 +82,9 @@ class HomeDashboardPage extends ConsumerWidget {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF4F46E5).withOpacity(0.15),
+                          color: const Color(0xFF4F46E5).withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: const Color(0xFF4F46E5).withOpacity(0.3)),
+                          border: Border.all(color: const Color(0xFF4F46E5).withValues(alpha: 0.3)),
                         ),
                         child: Text(
                           session.role.name.toUpperCase(),
@@ -94,358 +94,361 @@ class HomeDashboardPage extends ConsumerWidget {
                             fontWeight: FontWeight.w700,
                             color: Color(0xFF818CF8),
                             letterSpacing: 1.0,
+                          ),
                         ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            // ── Civic Score Card ──
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF312E81), Color(0xFF1E1B4B)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: const Color(0xFF3730A3).withOpacity(0.5)),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF4F46E5).withOpacity(0.15),
-                        blurRadius: 20,
-                        offset: const Offset(0, 8),
                       ),
                     ],
                   ),
-                  child: Row(
+                ),
+              ),
+
+              // ── Civic Score Card ──
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  child: Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF312E81), Color(0xFF1E1B4B)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: const Color(0xFF3730A3).withValues(alpha: 0.5)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF4F46E5).withValues(alpha: 0.15),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'CIVIC SCORE',
+                                style: TextStyle(
+                                  fontFamily: 'Inter',
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Color(0xFFC7D2FE),
+                                  letterSpacing: 1.5,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              scoreAsync.when(
+                                data: (score) => Text(
+                                  '${score.total} pts',
+                                  style: const TextStyle(
+                                    fontFamily: 'Inter',
+                                    fontSize: 32,
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                loading: () => const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                error: (_, __) => const Text(
+                                  '75 pts',
+                                  style: TextStyle(
+                                    fontFamily: 'Inter',
+                                    fontSize: 32,
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Level 3 · Elite Contributor',
+                                style: TextStyle(
+                                  fontFamily: 'Inter',
+                                  fontSize: 13,
+                                  color: Color(0xFF94A3B8),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.08),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.insights_rounded,
+                            color: Color(0xFF818CF8),
+                            size: 32,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              // ── Grid Actions Hub ──
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'CIVIC SCORE',
+                      const Text(
+                        'QUICK ACTIONS',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF64748B),
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      GridView.count(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 14,
+                        mainAxisSpacing: 14,
+                        childAspectRatio: 1.25,
+                        children: [
+                          _HubCard(
+                            title: 'Capture Crack',
+                            subtitle: 'Camera Verification',
+                            icon: Icons.camera_alt_rounded,
+                            iconColor: const Color(0xFFEC4899),
+                            gradientColors: const [Color(0xFF3F1D38), Color(0xFF271322)],
+                            borderColor: const Color(0xFFEC4899).withValues(alpha: 0.3),
+                            onTap: () => context.push('/capture'),
+                          ),
+                          _HubCard(
+                            title: 'Explore Map',
+                            subtitle: 'Live Defect Status',
+                            icon: Icons.map_rounded,
+                            iconColor: const Color(0xFF10B981),
+                            gradientColors: const [Color(0xFF143A2F), Color(0xFF0F2620)],
+                            borderColor: const Color(0xFF10B981).withValues(alpha: 0.3),
+                            onTap: () => context.push('/map'),
+                          ),
+                          _HubCard(
+                            title: 'Contractors',
+                            subtitle: 'View Passports',
+                            icon: Icons.construction_rounded,
+                            iconColor: const Color(0xFFF59E0B),
+                            gradientColors: const [Color(0xFF3F301D), Color(0xFF2B1F11)],
+                            borderColor: const Color(0xFFF59E0B).withValues(alpha: 0.3),
+                            onTap: () => context.push('/contractor-search'),
+                          ),
+                          _HubCard(
+                            title: 'Leaderboard',
+                            subtitle: 'Top Contractors',
+                            icon: Icons.leaderboard_rounded,
+                            iconColor: const Color(0xFF3B82F6),
+                            gradientColors: const [Color(0xFF1E2D4B), Color(0xFF111C33)],
+                            borderColor: const Color(0xFF3B82F6).withValues(alpha: 0.3),
+                            onTap: () {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Navigate to Leaderboard via Profile settings or Contractor profiles.'),
+                                  backgroundColor: Color(0xFF1E293B),
+                                ),
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // ── Live Stats Tracker ──
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  child: Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B).withValues(alpha: 0.4),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFF334155).withValues(alpha: 0.6)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: const [
+                            Text(
+                              'COMMUNITY PROGRESS',
                               style: TextStyle(
                                 fontFamily: 'Inter',
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
-                                color: Color(0xFFC7D2FE),
+                                color: Color(0xFF94A3B8),
                                 letterSpacing: 1.5,
                               ),
                             ),
-                            const SizedBox(height: 8),
-                            scoreAsync.when(
-                              data: (score) => Text(
-                                '${score.points} pts',
-                                style: const TextStyle(
-                                  fontFamily: 'Inter',
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.w900,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              loading: () => const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              error: (_, __) => const Text(
-                                '75 pts',
-                                style: TextStyle(
-                                  fontFamily: 'Inter',
-                                  fontSize: 32,
-                                  fontWeight: FontWeight.w900,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Level 3 · Elite Contributor',
+                            Text(
+                              '72% Resolved',
                               style: TextStyle(
                                 fontFamily: 'Inter',
-                                fontSize: 13,
-                                color: Color(0xFF94A3B8),
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF10B981),
                               ),
                             ),
                           ],
                         ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.08),
-                          shape: BoxShape.circle,
+                        const SizedBox(height: 12),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: const LinearProgressIndicator(
+                            value: 0.72,
+                            minHeight: 8,
+                            backgroundColor: Color(0xFF334155),
+                            color: Color(0xFF10B981),
+                          ),
                         ),
-                        child: const Icon(
-                          Icons.insights_rounded,
-                          color: Color(0xFF818CF8),
-                          size: 32,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // ── Grid Actions Hub ──
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'QUICK ACTIONS',
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFF64748B),
-                        letterSpacing: 1.5,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    GridView.count(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 14,
-                      mainAxisSpacing: 14,
-                      childAspectRatio: 1.25,
-                      children: [
-                        _HubCard(
-                          title: 'Capture Crack',
-                          subtitle: 'Camera Verification',
-                          icon: Icons.camera_alt_rounded,
-                          iconColor: const Color(0xFFEC4899),
-                          gradientColors: const [Color(0xFF3F1D38), Color(0xFF271322)],
-                          borderColor: const Color(0xFFEC4899).withOpacity(0.3),
-                          onTap: () => context.push('/capture'),
-                        ),
-                        _HubCard(
-                          title: 'Explore Map',
-                          subtitle: 'Live Defect Status',
-                          icon: Icons.map_rounded,
-                          iconColor: const Color(0xFF10B981),
-                          gradientColors: const [Color(0xFF143A2F), Color(0xFF0F2620)],
-                          borderColor: const Color(0xFF10B981).withOpacity(0.3),
-                          onTap: () => context.push('/map'),
-                        ),
-                        _HubCard(
-                          title: 'Contractors',
-                          subtitle: 'View Passports',
-                          icon: Icons.construction_rounded,
-                          iconColor: const Color(0xFFF59E0B),
-                          gradientColors: const [Color(0xFF3F301D), Color(0xFF2B1F11)],
-                          borderColor: const Color(0xFFF59E0B).withOpacity(0.3),
-                          onTap: () => context.push('/contractor-search'),
-                        ),
-                        _HubCard(
-                          title: 'Leaderboard',
-                          subtitle: 'Top Contractors',
-                          icon: Icons.leaderboard_rounded,
-                          iconColor: const Color(0xFF3B82F6),
-                          gradientColors: const [Color(0xFF1E2D4B), Color(0xFF111C33)],
-                          borderColor: const Color(0xFF3B82F6).withOpacity(0.3),
-                          onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Navigate to Leaderboard via Profile settings or Contractor profiles.'),
-                                backgroundColor: Color(0xFF1E293B),
-                              ),
-                            );
-                          },
+                        const SizedBox(height: 14),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: const [
+                            _StatItem(label: 'Total Fixed', value: '142'),
+                            _StatItem(label: 'In Progress', value: '38'),
+                            _StatItem(label: 'Open Claims', value: '16'),
+                          ],
                         ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
 
-            // ── Live Stats Tracker ──
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                child: Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E293B).withOpacity(0.4),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: const Color(0xFF334155).withOpacity(0.6)),
+              // ── Recent Activity / Potholes Header ──
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
+                  child: const Text(
+                    'RECENT CIVIC REPORTS (LIVE)',
+                    style: TextStyle(
+                      fontFamily: 'Inter',
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF64748B),
+                      letterSpacing: 1.5,
+                    ),
                   ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'COMMUNITY PROGRESS',
+                ),
+              ),
+
+              // ── Dynamic Recent Activity List ──
+              defectsAsync.when(
+                data: (defects) {
+                  if (defects.isEmpty) {
+                    return const SliverToBoxAdapter(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+                        child: Center(
+                          child: Text(
+                            'No reports found in this area.',
                             style: TextStyle(
                               fontFamily: 'Inter',
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF94A3B8),
-                              letterSpacing: 1.5,
+                              color: Color(0xFF64748B),
+                              fontSize: 14,
                             ),
-                          ),
-                          const Text(
-                            '72% Resolved',
-                            style: TextStyle(
-                              fontFamily: 'Inter',
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF10B981),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: const LinearProgressIndicator(
-                          value: 0.72,
-                          minHeight: 8,
-                          backgroundColor: Color(0xFF334155),
-                          color: Color(0xFF10B981),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: const [
-                          _StatItem(label: 'Total Fixed', value: '142'),
-                          _StatItem(label: 'In Progress', value: '38'),
-                          _StatItem(label: 'Open Claims', value: '16'),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // ── Recent Activity / Potholes Header ──
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
-                child: const Text(
-                  'RECENT CIVIC REPORTS (LIVE)',
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF64748B),
-                    letterSpacing: 1.5,
-                  ),
-                ),
-              ),
-            ),
-
-            // ── Dynamic Recent Activity List ──
-            defectsAsync.when(
-              data: (defects) {
-                if (defects.isEmpty) {
-                  return const SliverToBoxAdapter(
-                    child: Padding(
-                      padding: EdgeInsets.symmetric(vertical: 40, horizontal: 20),
-                      child: Center(
-                        child: Text(
-                          'No reports found in this area.',
-                          style: TextStyle(
-                            fontFamily: 'Inter',
-                            color: Color(0xFF64748B),
-                            fontSize: 14,
                           ),
                         ),
                       ),
+                    );
+                  }
+                  return SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final defect = defects[index];
+                        Color statusColor;
+                        switch (defect.status) {
+                          case DefectStatus.resolved:
+                          case DefectStatus.closed:
+                            statusColor = const Color(0xFF10B981);
+                            break;
+                          case DefectStatus.inProgress:
+                          case DefectStatus.assigned:
+                            statusColor = const Color(0xFFF59E0B);
+                            break;
+                          case DefectStatus.rejected:
+                            statusColor = const Color(0xFFEF4444);
+                            break;
+                          default:
+                            statusColor = const Color(0xFF3B82F6);
+                        }
+                        
+                        String cleanCategory = defect.category.name;
+                        // Prettify category string
+                        if (cleanCategory.length > 1) {
+                          cleanCategory = cleanCategory[0].toUpperCase() + cleanCategory.substring(1);
+                        }
+
+                        final isBridgeType = defect.category.name.toLowerCase().contains('bridge');
+
+                        return _ActivityTile(
+                          category: cleanCategory,
+                          location: 'Lat: ${defect.latitude.toStringAsFixed(5)}, Lng: ${defect.longitude.toStringAsFixed(5)}',
+                          status: defect.status.name,
+                          statusColor: statusColor,
+                          icon: isBridgeType
+                              ? Icons.construction_rounded
+                              : Icons.warning_amber_rounded,
+                          time: defect.watermarkVerified ? 'Verified' : 'Unverified',
+                        );
+                      },
+                      childCount: defects.length > 5 ? 5 : defects.length, // Show up to 5 items on dashboard
                     ),
                   );
-                }
-                return SliverList(
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) {
-                      final defect = defects[index];
-                      Color statusColor;
-                      switch (defect.status) {
-                        case DefectStatus.resolved:
-                        case DefectStatus.closed:
-                          statusColor = const Color(0xFF10B981);
-                          break;
-                        case DefectStatus.inProgress:
-                        case DefectStatus.assigned:
-                          statusColor = const Color(0xFFF59E0B);
-                          break;
-                        case DefectStatus.rejected:
-                          statusColor = const Color(0xFFEF4444);
-                          break;
-                        default:
-                          statusColor = const Color(0xFF3B82F6);
-                      }
-                      
-                      String cleanCategory = defect.category.name;
-                      // Prettify category string
-                      if (cleanCategory.length > 1) {
-                        cleanCategory = cleanCategory[0].toUpperCase() + cleanCategory.substring(1);
-                      }
-
-                      return _ActivityTile(
-                        category: cleanCategory,
-                        location: 'Lat: ${defect.latitude.toStringAsFixed(5)}, Lng: ${defect.longitude.toStringAsFixed(5)}',
-                        status: defect.status.name,
-                        statusColor: statusColor,
-                        icon: defect.category == ReportCategory.bridge
-                            ? Icons.construction_rounded
-                            : Icons.warning_amber_rounded,
-                        time: defect.watermarkVerified ? 'Verified' : 'Unverified',
-                      );
-                    },
-                    childCount: defects.length > 5 ? 5 : defects.length, // Show up to 5 items on dashboard
-                  ),
-                );
-              },
-              loading: () => const SliverToBoxAdapter(
-                child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: 40),
-                  child: Center(
-                    child: CircularProgressIndicator(color: Color(0xFF4F46E5)),
+                },
+                loading: () => const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 40),
+                    child: Center(
+                      child: CircularProgressIndicator(color: Color(0xFF4F46E5)),
+                    ),
                   ),
                 ),
-              ),
-              error: (err, _) => SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
-                  child: Center(
-                    child: Text(
-                      'Failed to load live reports: $err',
-                      style: const TextStyle(
-                        fontFamily: 'Inter',
-                        color: Color(0xFFEF4444),
-                        fontSize: 14,
+                error: (err, _) => SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+                    child: Center(
+                      child: Text(
+                        'Failed to load live reports: $err',
+                        style: const TextStyle(
+                          fontFamily: 'Inter',
+                          color: Color(0xFFEF4444),
+                          fontSize: 14,
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-            
-            const SliverToBoxAdapter(
-              child: SizedBox(height: 40),
-            ),
-          ],
+              
+              const SliverToBoxAdapter(
+                child: SizedBox(height: 40),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -487,7 +490,7 @@ class _HubCard extends StatelessWidget {
           border: Border.all(color: borderColor),
           boxShadow: [
             BoxShadow(
-              color: iconColor.withOpacity(0.05),
+              color: iconColor.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -585,16 +588,16 @@ class _ActivityTile extends StatelessWidget {
       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B).withOpacity(0.3),
+        color: const Color(0xFF1E293B).withValues(alpha: 0.3),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFF334155).withOpacity(0.4)),
+        border: Border.all(color: const Color(0xFF334155).withValues(alpha: 0.4)),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: const Color(0xFF334155).withOpacity(0.5),
+              color: const Color(0xFF334155).withValues(alpha: 0.5),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: const Color(0xFF94A3B8), size: 20),
@@ -631,9 +634,9 @@ class _ActivityTile extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(
-                  color: statusColor.withOpacity(0.12),
+                  color: statusColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: statusColor.withOpacity(0.2)),
+                  border: Border.all(color: statusColor.withValues(alpha: 0.2)),
                 ),
                 child: Text(
                   status,
