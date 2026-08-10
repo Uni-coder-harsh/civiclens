@@ -321,29 +321,65 @@ async def upload_infrastructure_report(request: Request, db: AsyncSession = Depe
     now_str = datetime.now(timezone.utc).isoformat()
     content_type = request.headers.get("content-type", "")
     
+    logger.info(f"[REPORT UPLOAD] Received request. Content-Type: {content_type}")
+    
     image_url = "https://images.unsplash.com/photo-1515162816999-a0c47dc192f7"
     file_bytes = b""
     mime_type = "image/jpeg"
     
-    if "multipart/form-data" in content_type:
-        form = await request.form()
-        payload_str = form.get("payload")
-        if not payload_str:
-            raise HTTPException(status_code=400, detail="Missing payload form field")
-        payload_dict = json.loads(payload_str)
-        payload = ReportPayloadSchema(**payload_dict)
-        
-        image_file = form.get("image")
-        if image_file:
-            file_bytes = await image_file.read()
-            mime_type = image_file.content_type or "image/jpeg"
-            if file_bytes:
-                object_name = f"reports/{payload.id}.jpg"
-                image_url = upload_file_to_storage(file_bytes, object_name, mime_type)
-    else:
-        payload_bytes = await request.body()
-        payload_dict = json.loads(payload_bytes)
-        payload = ReportPayloadSchema(**payload_dict)
+    try:
+        if "multipart/form-data" in content_type:
+            logger.info("[REPORT UPLOAD] Parsing multipart form payload...")
+            form = await request.form()
+            payload_str = form.get("payload")
+            if not payload_str:
+                logger.error("[REPORT UPLOAD] Missing 'payload' form field in request.")
+                raise HTTPException(status_code=400, detail="Missing payload form field")
+            
+            logger.debug(f"[REPORT UPLOAD] Raw payload content: {payload_str}")
+            try:
+                payload_dict = json.loads(payload_str)
+                payload = ReportPayloadSchema(**payload_dict)
+            except Exception as pe:
+                logger.error(f"[REPORT UPLOAD] Failed to parse or validate report payload JSON: {pe}")
+                raise HTTPException(status_code=400, detail=f"Invalid payload JSON or schema: {str(pe)}")
+            
+            # Sweep mode mobile cache logger
+            if payload.sensor_data:
+                logger.info(f"[REPORT UPLOAD][SWEEP MODE] Multimodal payload received from mobile cache. Sensor telemetry size: {len(payload.sensor_data)} characters.")
+                logger.debug(f"[REPORT UPLOAD][SWEEP MODE] Sensor telemetry details: {payload.sensor_data}")
+            else:
+                logger.info(f"[REPORT UPLOAD][SINGLE PHOTO] Standard single photo report payload received.")
+            
+            image_file = form.get("image")
+            if image_file:
+                logger.info(f"[REPORT UPLOAD] Image file detected: {image_file.filename}")
+                file_bytes = await image_file.read()
+                mime_type = image_file.content_type or "image/jpeg"
+                if file_bytes:
+                    object_name = f"reports/{payload.id}.jpg"
+                    logger.info(f"[REPORT UPLOAD] Uploading image byte stream of size {len(file_bytes)} bytes to S3/MinIO bucket...")
+                    image_url = upload_file_to_storage(file_bytes, object_name, mime_type)
+                    logger.info(f"[REPORT UPLOAD] S3 upload completed successfully. Public url: {image_url}")
+                else:
+                    logger.warning("[REPORT UPLOAD] Image form field was present, but file was 0 bytes.")
+            else:
+                logger.warning("[REPORT UPLOAD] No 'image' form file attached to this report upload request.")
+        else:
+            logger.info("[REPORT UPLOAD] Parsing raw JSON body...")
+            payload_bytes = await request.body()
+            logger.debug(f"[REPORT UPLOAD] Raw body content: {payload_bytes.decode('utf-8', errors='ignore')}")
+            try:
+                payload_dict = json.loads(payload_bytes)
+                payload = ReportPayloadSchema(**payload_dict)
+            except Exception as pe:
+                logger.error(f"[REPORT UPLOAD] Failed to parse raw body JSON: {pe}")
+                raise HTTPException(status_code=400, detail=f"Invalid payload JSON or schema: {str(pe)}")
+    except HTTPException:
+        raise
+    except Exception as parse_err:
+        logger.error(f"[REPORT UPLOAD] Global parsing exception: {parse_err}")
+        raise HTTPException(status_code=400, detail=f"Failed to parse request: {str(parse_err)}")
 
     # Save to Neon PostgreSQL database with geospatial point geometry
     try:
@@ -454,6 +490,10 @@ async def upload_infrastructure_report(request: Request, db: AsyncSession = Depe
     except Exception as db_err:
         logger.error(f"Failed to persist report {payload.id} in Neon database: {db_err}")
         await db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database write failed: {str(db_err)}"
+        )
 
     # Fallback/Parallel Memory Cache Sync for local queries
     store.defects[payload.id] = {
@@ -1677,9 +1717,12 @@ async def upload_avatar(
     userId: str = Form(...),
     file: UploadFile = File(...)
 ):
+    logger.info(f"[AVATAR UPLOAD] Upload request received for user ID: {userId}. Filename: {file.filename}, Content-Type: {file.content_type}")
+
     # File type check
     allowed_types = ["image/jpeg", "image/png", "image/webp", "image/jpg"]
     if file.content_type not in allowed_types:
+        logger.warning(f"[AVATAR UPLOAD] Rejected file with invalid format: {file.content_type}")
         raise HTTPException(
             status_code=400,
             detail=f"Invalid file type {file.content_type}. Only JPEG, PNG, and WEBP are allowed."
@@ -1688,7 +1731,9 @@ async def upload_avatar(
     # Size limit check (5 MB)
     max_size = 5 * 1024 * 1024
     file_bytes = await file.read()
+    logger.info(f"[AVATAR UPLOAD] Read {len(file_bytes)} bytes from stream.")
     if len(file_bytes) > max_size:
+        logger.warning(f"[AVATAR UPLOAD] Rejected file exceeding 5MB: {len(file_bytes)} bytes.")
         raise HTTPException(
             status_code=400,
             detail="File size exceeds the 5MB limit."
@@ -1702,20 +1747,25 @@ async def upload_avatar(
         
         # Resize if width or height is > 1024px to reduce size
         if img.width > 1024 or img.height > 1024:
+            logger.info(f"[AVATAR UPLOAD] Resizing image from {img.width}x{img.height} down to 1024max boundary...")
             img.thumbnail((1024, 1024))
             
         output = io.BytesIO()
         img.save(output, format="JPEG", quality=80)
         file_bytes = output.getvalue()
+        logger.info(f"[AVATAR UPLOAD] Compression completed. Compressed size: {len(file_bytes)} bytes.")
     except Exception as img_err:
-        logger.warning(f"PIL compression skipped or failed: {img_err}")
+        logger.warning(f"[AVATAR UPLOAD] PIL compression skipped or failed: {img_err}")
 
     # Upload to Supabase/MinIO
     try:
         object_name = f"avatars/{userId}_{int(datetime.now(timezone.utc).timestamp())}.jpg"
+        logger.info(f"[AVATAR UPLOAD] Uploading object '{object_name}' to Supabase bucket...")
         avatar_url = upload_file_to_storage(file_bytes, object_name, "image/jpeg")
+        logger.info(f"[AVATAR UPLOAD] Avatar stashed successfully. Public URL: {avatar_url}")
         return {"avatarUrl": avatar_url}
     except Exception as e:
+        logger.error(f"[AVATAR UPLOAD] Upload error during storage write: {e}")
         raise HTTPException(
             status_code=500,
             detail=f"Failed to upload avatar: {str(e)}"

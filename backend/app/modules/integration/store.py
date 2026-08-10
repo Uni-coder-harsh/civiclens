@@ -198,6 +198,19 @@ class IntegrationStore:
                 "zone": "Bibwewadi",
                 "thumb": "https://images.unsplash.com/photo-1584467735871-8e85353a8413",
                 "contractorId": None
+            },
+            {
+                "id": "report_09",
+                "category": "pothole",
+                "severity": "high",
+                "status": "submitted",
+                "lat": 37.4219983,
+                "lng": -122.0840000,
+                "watermarkVerified": True,
+                "aiConfidence": 0.90,
+                "zone": "Googleplex",
+                "thumb": "https://images.unsplash.com/photo-1515162816999-a0c47dc192f7",
+                "contractorId": None
             }
         ]
 
