@@ -23,6 +23,7 @@ from app.modules.severity.router import router as severity_router
 from app.modules.notifications.router import router as notifications_router
 from app.modules.analytics.router import router as analytics_router
 from app.modules.integration.router import router as integration_router
+from app.modules.reports.router import router as reports_router
 
 # Import ORM models so SQLAlchemy metadata and string relationships are registered.
 from app.modules.auth import model as auth_models  # noqa: F401
@@ -35,6 +36,7 @@ from app.modules.severity import model as severity_models  # noqa: F401
 from app.modules.notifications import model as notification_models  # noqa: F401
 from app.modules.analytics import model as analytics_models  # noqa: F401
 from app.modules.system import model as system_models  # noqa: F401
+from app.modules.reports import model as report_models  # noqa: F401
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -98,6 +100,7 @@ app.include_router(severity_router, prefix=api_prefix)
 app.include_router(notifications_router, prefix=api_prefix)
 app.include_router(analytics_router, prefix=api_prefix)
 app.include_router(integration_router)
+app.include_router(reports_router, prefix=api_prefix)
 
 @app.get("/", include_in_schema=False)
 async def root_redirect():

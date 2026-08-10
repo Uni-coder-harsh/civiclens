@@ -30,12 +30,25 @@ class RemoteInfrastructureApi implements InfrastructureApi {
         'image': await MultipartFile.fromFile(imagePath, filename: 'defect_image.jpg'),
     });
 
-    final response = await dio.post(
-      '/v1/reports',
-      data: formData,
-      onSendProgress: onProgress,
-    );
-    return ReportResponse.fromJson(response.data as Map<String, dynamic>);
+    try {
+      print('[Upload] Sending report to backend, image present: $fileExists');
+      final response = await dio.post(
+        '/api/v1/reports',
+        data: formData,
+        onSendProgress: onProgress,
+      );
+      return ReportResponse.fromJson(response.data as Map<String, dynamic>);
+    } on DioError catch (e) {
+      print('[Upload] DioError: ${e.message}');
+      if (e.response != null) {
+        print('[Upload] Status: ${e.response?.statusCode}');
+        print('[Upload] Body: ${e.response?.data}');
+      }
+      rethrow;
+    } catch (e) {
+      print('[Upload] Unexpected error: $e');
+      rethrow;
+    }
   }
 
   @override

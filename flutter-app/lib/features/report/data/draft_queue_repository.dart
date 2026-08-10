@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/app_database.dart';
 import '../../../core/database/draft_queue_dao.dart';
 import '../../../core/network/api_providers.dart';
+import '../../../core/network/infrastructure_api.dart';
 import '../../../shared/report_payload.dart';
 
 /// A draft item enriched with its current [SyncState] from the DB row.
@@ -25,12 +26,13 @@ class DraftItem {
   });
 }
 
-/// Repository wrapping [DraftQueueDao] and local file storage.
-/// Converts between Drift [ReportDraft] rows and [ReportPayload] domain objects.
+/// Repository that uploads reports directly to the backend.
+/// On network failure, falls back to local SQLite so the report can be retried.
 class DraftQueueRepository {
   final DraftQueueDao _dao;
+  final InfrastructureApi _api;
 
-  DraftQueueRepository(this._dao);
+  DraftQueueRepository(this._dao, this._api);
 
   // ── Streams ────────────────────────────────────────────────────────────────
 
@@ -58,37 +60,58 @@ class DraftQueueRepository {
 
   // ── Write ─────────────────────────────────────────────────────────────────
 
-  /// Idempotent upsert — saves [payload] metadata and image references to Drift.
+  /// Tries to upload the report directly to the backend (Neon/Supabase).
+  /// On failure, persists locally so the sync controller can retry later.
   Future<void> saveDraft(ReportPayload payload) async {
-    final companion = ReportDraftsCompanion.insert(
-      id: payload.id,
-      userId: payload.userId,
-      category: payload.category.name,
-      severity: payload.severity.name,
-      description: payload.description,
-      latitude: payload.capture.latitude,
-      longitude: payload.capture.longitude,
-      altitudeMeters: payload.capture.altitudeMeters,
-      accuracyMeters: payload.capture.accuracyMeters,
-      bearingDegrees: payload.capture.bearingDegrees,
-      speedMps: payload.capture.speedMps,
-      capturedAtUtc: payload.capture.capturedAtUtc,
-      imagePath: payload.imagePath,
-      thumbnailPath: Value(payload.thumbnailPath),
-      contractorId: Value(payload.contractorId),
-      infrastructureId: Value(payload.infrastructureId),
-      qualityGate: payload.qualityGate.name,
-      isGuest: payload.isGuest,
-      syncState: 'pending',
-      createdAtUtc: DateTime.now().toUtc(),
-      sensorData: Value(payload.sensorData),
-    );
-    await _dao.insertDraft(companion);
+    try {
+      await _api.uploadInfrastructureReport(payload);
+    } on Exception {
+      // Store locally so pending reports survive and can be retried.
+      final companion = ReportDraftsCompanion.insert(
+        id: payload.id,
+        userId: payload.userId,
+        category: payload.category.name,
+        severity: payload.severity.name,
+        description: payload.description,
+        latitude: payload.capture.latitude,
+        longitude: payload.capture.longitude,
+        altitudeMeters: payload.capture.altitudeMeters,
+        accuracyMeters: payload.capture.accuracyMeters,
+        bearingDegrees: payload.capture.bearingDegrees,
+        speedMps: payload.capture.speedMps,
+        capturedAtUtc: payload.capture.capturedAtUtc,
+        imagePath: payload.imagePath,
+        thumbnailPath: Value(payload.thumbnailPath),
+        contractorId: Value(payload.contractorId),
+        infrastructureId: Value(payload.infrastructureId),
+        qualityGate: payload.qualityGate.name,
+        isGuest: payload.isGuest,
+        syncState: 'pending',
+        createdAtUtc: DateTime.now().toUtc(),
+        sensorData: Value(payload.sensorData),
+      );
+      await _dao.insertDraft(companion);
+      rethrow;
+    }
+  }
+
+  /// Retries all pending/failed local drafts by uploading them to the backend.
+  /// Removes successfully uploaded drafts from local storage.
+  Future<void> syncPendingDrafts() async {
+    final pendingRows = await _dao.getPendingDrafts();
+    for (final row in pendingRows) {
+      final payload = _rowToPayload(row);
+      try {
+        await _api.uploadInfrastructureReport(payload);
+        await _dao.markSynced(row.id, row.id);
+      } catch (e) {
+        await _dao.markFailed(row.id, e.toString());
+      }
+    }
   }
 
   /// Removes a draft entry and its associated local media files from disk.
   Future<void> deleteDraft(String id) async {
-    // Fetch row before deletion to clean up files
     final rows = await _dao.getPendingDrafts();
     final row = rows.cast<ReportDraft?>().firstWhere(
           (r) => r?.id == id,
@@ -169,7 +192,8 @@ class DraftQueueRepository {
 
 final draftQueueRepositoryProvider = Provider<DraftQueueRepository>((ref) {
   final db = ref.watch(appDatabaseProvider);
-  return DraftQueueRepository(DraftQueueDao(db));
+  final api = ref.watch(apiClientProvider);
+  return DraftQueueRepository(DraftQueueDao(db), api);
 });
 
 /// Top-level stream provider — safe to watch in build() without recreation bugs.

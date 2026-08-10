@@ -8,7 +8,7 @@ abstract class AppConfig {
   static const bool useMockApi = false;
   static const bool isDemoBuild = false; // Set false for production builds
   
-  static const bool useLocalBackend = true;
+  static const bool useLocalBackend = false;
   
   static String get localApiBaseUrl {
     if (!kIsWeb && Platform.isAndroid) {
