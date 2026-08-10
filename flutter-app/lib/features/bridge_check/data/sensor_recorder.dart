@@ -113,8 +113,10 @@ class SensorRecorder {
   Future<void> _fetchGpsLocation() async {
     try {
       final pos = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 4),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 4),
+        ),
       );
       _latitude = pos.latitude;
       _longitude = pos.longitude;

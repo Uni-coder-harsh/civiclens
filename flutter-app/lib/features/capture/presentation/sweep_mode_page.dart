@@ -1,20 +1,20 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:uuid/uuid.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+
+import 'package:geolocator/geolocator.dart';
 
 import '../../../core/geo/geo_capture_service.dart';
 import '../../../core/permissions/permission_service.dart';
 import '../../../shared/report_payload.dart';
 import '../../../core/sensor/sensor_processing_service.dart';
 import '../../report/data/draft_queue_repository.dart';
-import '../../../core/auth/auth_session.dart';
+import '../../auth/application/auth_controller.dart';
 
 /// Sweep Mode / Mobile Road Scan Page
 ///
@@ -59,7 +59,6 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
   StreamSubscription<AccelerometerEvent>? _accelSub;
   StreamSubscription<GyroscopeEvent>? _gyroSub;
   StreamSubscription<GpsAccuracyBadge>? _gpsBadgeSub;
-  Timer? _metricsTimer;
 
   // Counters and event records
   int _captureCount = 0;
@@ -256,8 +255,10 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
   Future<void> _updateCoordinates() async {
     try {
       final pos = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 2),
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 2),
+        ),
       );
       if (mounted) {
         setState(() {
