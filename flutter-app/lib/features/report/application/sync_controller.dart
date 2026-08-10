@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/database/draft_queue_dao.dart';
 import '../../../core/network/api_providers.dart';
 import '../../../shared/report_payload.dart';
+import '../../auth/application/auth_controller.dart';
 import '../data/draft_queue_repository.dart';
 
 /// Summarises the overall sync queue state exposed to the UI.
@@ -133,9 +134,15 @@ class SyncController extends AsyncNotifier<SyncSummaryState> {
       await _uploadDraft(draft.id);
     }
 
+    // Fetch remote reports for the user from Neon DB server
+    try {
+      final session = ref.read(authSessionProvider);
+      await repo.fetchAndCacheUserReports(session.userId);
+    } catch (_) {}
+
     _isSyncing = false;
-  // All drafts processed; clear counts
-  _updateState(isSyncing: false, pendingCount: 0, uploadingCount: 0);
+    // All drafts processed; clear counts
+    _updateState(isSyncing: false, pendingCount: 0, uploadingCount: 0);
   }
 
   Future<void> _uploadDraft(String draftId) async {

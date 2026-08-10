@@ -264,34 +264,49 @@ def haversine_distance(lat1, lon1, lat2, lon2):
     return R * c
 
 def upload_file_to_storage(file_data: bytes, object_name: str, content_type: str) -> str:
+    raw_url = os.environ.get("SUPABASE_URL", "").strip()
+    supabase_key = os.environ.get("SUPABASE_SERVICE_KEY", "").strip()
+
+    if raw_url and supabase_key:
+        supabase_url = raw_url
+        if "/storage/v1" in supabase_url:
+            supabase_url = supabase_url.split("/storage/v1")[0]
+        supabase_url = supabase_url.replace("storage.supabase.co", "supabase.co").rstrip("/")
+
+        try:
+            from supabase import create_client  # type: ignore
+
+            client = create_client(supabase_url, supabase_key)
+            bucket = os.environ.get("SUPABASE_BUCKET", "civiclens_storage")
+
+            # Ensure public bucket exists
+            try:
+                client.storage.create_bucket(bucket, options={"public": True})
+            except Exception:
+                pass
+
+            client.storage.from_(bucket).upload(
+                path=object_name,
+                file=file_data,
+                file_options={"content-type": content_type},
+            )
+            public_url = client.storage.from_(bucket).get_public_url(object_name)
+            logger.info(f"[STORAGE] Uploaded {object_name} to Supabase Storage | url={public_url}")
+            return public_url
+        except Exception as e:
+            logger.error(f"[STORAGE] Supabase upload failed for {object_name}: {e}")
+            raise HTTPException(status_code=500, detail=f"Cloud storage upload failed: {e}")
+
     try:
-        # Initialize Minio client (which can connect to MinIO or Supabase S3)
         client = Minio(
             settings.MINIO_ENDPOINT,
             access_key=settings.MINIO_ROOT_USER,
             secret_key=settings.MINIO_ROOT_PASSWORD,
             secure=settings.MINIO_SECURE
         )
-        
-        # Check if bucket exists, if not, create it
         found = client.bucket_exists(settings.MINIO_BUCKET_NAME)
         if not found:
             client.make_bucket(settings.MINIO_BUCKET_NAME)
-            # Set public read policy for the bucket
-            policy = {
-                "Version": "2012-10-17",
-                "Statement": [
-                    {
-                        "Effect": "Allow",
-                        "Principal": "*",
-                        "Action": ["s3:GetObject"],
-                        "Resource": [f"arn:aws:s3:::{settings.MINIO_BUCKET_NAME}/*"]
-                    }
-                ]
-            }
-            client.set_bucket_policy(settings.MINIO_BUCKET_NAME, json.dumps(policy))
-            
-        # Upload object
         client.put_object(
             settings.MINIO_BUCKET_NAME,
             object_name,
@@ -299,18 +314,11 @@ def upload_file_to_storage(file_data: bytes, object_name: str, content_type: str
             len(file_data),
             content_type=content_type
         )
-        
-        # Construct public URL
         protocol = "https" if settings.MINIO_SECURE else "http"
-        endpoint = settings.MINIO_ENDPOINT
-        if "supabase.co" in endpoint:
-            project_ref = endpoint.replace("https://", "").replace("http://", "").split(".")[0]
-            return f"https://{project_ref}.supabase.co/storage/v1/object/public/{settings.MINIO_BUCKET_NAME}/{object_name}"
-        return f"{protocol}://{endpoint}/{settings.MINIO_BUCKET_NAME}/{object_name}"
+        return f"{protocol}://{settings.MINIO_ENDPOINT}/{settings.MINIO_BUCKET_NAME}/{object_name}"
     except Exception as e:
-        logger.error(f"Failed to upload file to object storage: {e}")
-        # Return fallback URL
-        return f"https://images.unsplash.com/photo-1515162816999-a0c47dc192f7"
+        logger.error(f"[STORAGE] MinIO fallback upload failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Storage upload failed: {e}")
 
 # =====================================================================
 # API Route Implementations
@@ -968,17 +976,40 @@ async def fetch_civic_score(user_id: str):
     }
 
 @router.get("/users/{user_id}/reports", response_model=List[ReportResponseSchema])
-async def fetch_my_reports(user_id: str):
-    results = []
-    now_str = datetime.now(timezone.utc).isoformat()
-    for d in store.defects.values():
-        results.append({
-            "report_id": d["report_id"],
-            "status": d["status"],
-            "civic_score_delta": 15,
-            "created_at": now_str
-        })
-    return results
+async def fetch_my_reports(
+    user_id: str,
+    db: AsyncSession = Depends(get_db_session)
+):
+    logger.info(f"[Reports] Fetching user reports from DB for user_id={user_id}")
+    try:
+        from app.modules.reports.model import CivicReport
+        stmt = select(CivicReport).order_by(CivicReport.created_at.desc())
+        res = await db.execute(stmt)
+        all_reports = res.scalars().all()
+
+        matching = [
+            r for r in all_reports
+            if str(r.user_id) == user_id or r.client_id == user_id or user_id == "demo-user"
+        ]
+        reports_to_return = matching if matching else all_reports
+
+        results = []
+        for r in reports_to_return:
+            created_str = r.created_at.isoformat() if r.created_at else datetime.now(timezone.utc).isoformat()
+            results.append({
+                "report_id": r.client_id or str(r.id),
+                "status": r.status or "submitted",
+                "civic_score_delta": r.civic_score_delta or 10,
+                "created_at": created_str,
+                "created_at_utc": created_str,
+                "ai_confidence": r.ai_confidence,
+                "ai_label": r.ai_label,
+                "assigned_contractor_id": r.contractor_id,
+            })
+        return results
+    except Exception as e:
+        logger.error(f"[Reports] Error fetching reports for user {user_id}: {e}")
+        return []
 
 @router.post("/reports/sync", response_model=List[ReportResponseSchema])
 async def sync_pending_drafts(drafts: List[ReportPayloadSchema]):
@@ -1715,7 +1746,8 @@ async def update_profile(body: UpdateProfileRequest, db: AsyncSession = Depends(
 @router.post("/auth/profile/avatar")
 async def upload_avatar(
     userId: str = Form(...),
-    file: UploadFile = File(...)
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db_session)
 ):
     logger.info(f"[AVATAR UPLOAD] Upload request received for user ID: {userId}. Filename: {file.filename}, Content-Type: {file.content_type}")
 
@@ -1762,7 +1794,21 @@ async def upload_avatar(
         object_name = f"avatars/{userId}_{int(datetime.now(timezone.utc).timestamp())}.jpg"
         logger.info(f"[AVATAR UPLOAD] Uploading object '{object_name}' to Supabase bucket...")
         avatar_url = upload_file_to_storage(file_bytes, object_name, "image/jpeg")
-        logger.info(f"[AVATAR UPLOAD] Avatar stashed successfully. Public URL: {avatar_url}")
+        logger.info(f"[AVATAR UPLOAD] Avatar uploaded successfully. Public URL: {avatar_url}")
+
+        # Update User record in Neon PostgreSQL DB
+        try:
+            user_uuid = uuid.UUID(userId)
+            stmt = select(User).where(User.id == user_uuid)
+            res = await db.execute(stmt)
+            db_user = res.scalar_one_or_none()
+            if db_user:
+                db_user.avatar_url = avatar_url
+                await db.commit()
+                logger.info(f"[AVATAR UPLOAD] ✅ Updated avatar_url for user_id={userId} in Neon DB.")
+        except Exception as db_err:
+            logger.warning(f"[AVATAR UPLOAD] DB avatar record update note: {db_err}")
+
         return {"avatarUrl": avatar_url}
     except Exception as e:
         logger.error(f"[AVATAR UPLOAD] Upload error during storage write: {e}")

@@ -52,6 +52,11 @@ class DraftQueueDao {
     return _db.into(_db.reportDrafts).insertOnConflictUpdate(companion);
   }
 
+  /// Persists or updates a synced draft row directly without overriding syncState.
+  Future<int> insertSyncedDraft(ReportDraftsCompanion draft) {
+    return _db.into(_db.reportDrafts).insertOnConflictUpdate(draft);
+  }
+
   /// Updates [syncState] to `pending`.
   Future<int> markPending(String id) {
     return (_db.update(_db.reportDrafts)..where((t) => t.id.equals(id)))

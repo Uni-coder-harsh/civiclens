@@ -134,6 +134,36 @@ class DraftQueueRepository {
     await _dao.deleteDraft(id);
   }
 
+  /// Fetches reports submitted by [userId] from Neon DB server and upserts them locally so they appear in Activity Page
+  Future<void> fetchAndCacheUserReports(String userId) async {
+    try {
+      final remoteReports = await _api.fetchMyReports(userId);
+      for (final r in remoteReports) {
+        final companion = ReportDraftsCompanion.insert(
+          id: r.reportId,
+          userId: userId,
+          category: 'infrastructure',
+          severity: 'medium',
+          description: 'Submitted Report (${r.status.name})',
+          latitude: 0.0,
+          longitude: 0.0,
+          altitudeMeters: 0.0,
+          accuracyMeters: 0.0,
+          bearingDegrees: 0.0,
+          speedMps: 0.0,
+          capturedAtUtc: r.createdAtUtc,
+          imagePath: '',
+          qualityGate: 'passed',
+          isGuest: false,
+          syncState: 'synced',
+          createdAtUtc: r.createdAtUtc,
+          syncedAtUtc: Value(r.createdAtUtc),
+        );
+        await _dao.insertSyncedDraft(companion);
+      }
+    } catch (_) {}
+  }
+
   // ── Internal ──────────────────────────────────────────────────────────────
 
   ReportPayload _rowToPayload(ReportDraft row) {
