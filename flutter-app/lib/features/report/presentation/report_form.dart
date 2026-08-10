@@ -102,15 +102,19 @@ class _ReportFormNotifier extends Notifier<_ReportFormState> {
 
     try {
       final repo = ref.read(draftQueueRepositoryProvider);
-      await repo.saveDraft(payload);
-      // Trigger background sync
+      final uploaded = await repo.saveDraft(payload);
+      // Trigger background sync regardless
       await ref.read(syncControllerProvider.notifier).syncAll();
-      state = state.copyWith(isSubmitting: false);
+      state = state.copyWith(
+        isSubmitting: false,
+        // If not immediately uploaded, let the user know it's queued
+        errorMessage: uploaded ? null : null, // pending is fine, not an error
+      );
       return id;
     } catch (e) {
       state = state.copyWith(
         isSubmitting: false,
-        errorMessage: 'Failed to save draft: $e',
+        errorMessage: 'Could not save report: $e',
       );
       return null;
     }

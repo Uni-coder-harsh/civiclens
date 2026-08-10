@@ -221,11 +221,12 @@ class ReportResponse {
   factory ReportResponse.fromJson(Map<String, dynamic> json) => ReportResponse(
         reportId: json['report_id'] as String,
         status: DefectStatus.values.byName(json['status'] as String),
-        aiConfidence: json['ai_confidence'] as String?,
+        aiConfidence: (json['ai_confidence'] as num?)?.toString(),
         aiLabel: json['ai_label'] as String?,
         assignedContractorId: json['assigned_contractor_id'] as String?,
-        civicScoreDelta: json['civic_score_delta'] as int? ?? 0,
-        createdAtUtc: DateTime.parse(json['created_at'] as String),
+        civicScoreDelta: (json['civic_score_delta'] as num?)?.toInt() ?? 0,
+        createdAtUtc: DateTime.parse(
+            (json['created_at_utc'] ?? json['created_at']) as String),
         slaClock: json['sla_clock'] != null
             ? SlaClock.fromJson(json['sla_clock'] as Map<String, dynamic>)
             : null,

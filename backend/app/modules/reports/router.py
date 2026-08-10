@@ -1,15 +1,13 @@
 import json
-import logging
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infrastructure.database import get_db_session
 from app.modules.reports.repository import ReportsRepository
 from app.modules.reports.schema import ReportCreate, ReportResponse
 from app.modules.reports.service import ReportsService
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
@@ -26,19 +24,30 @@ async def submit_report(
 ):
     """
     Accepts a citizen infrastructure defect report from the Flutter app.
-    The `payload` field is a JSON string and `image` is an optional file upload.
-    No auth required — supports both guest and registered users.
+    `payload` is a JSON string; `image` is an optional file upload.
+    Supports both guest and registered users — no auth required.
     """
     try:
         payload_dict = json.loads(payload)
     except json.JSONDecodeError as e:
-        logger.error(f"[Reports] Invalid JSON payload: {e}")
-        from fastapi import HTTPException
+        logger.error(f"[Reports] ❌ Bad JSON in payload field: {e}")
         raise HTTPException(status_code=400, detail=f"Invalid JSON payload: {e}")
 
-    logger.info(f"[Reports] Received report submission: id={payload_dict.get('id')} category={payload_dict.get('category')}")
+    client_id = payload_dict.get("id", "unknown")
+    category = payload_dict.get("category", "unknown")
+    has_image = image is not None and image.filename
 
-    data = ReportCreate(**payload_dict)
+    logger.info(
+        f"[Reports] 📥 Incoming report | client_id={client_id} "
+        f"category={category} image={'yes' if has_image else 'no'}"
+    )
+
+    try:
+        data = ReportCreate(**payload_dict)
+    except Exception as e:
+        logger.error(f"[Reports] ❌ Schema validation failed for client_id={client_id}: {e}")
+        raise HTTPException(status_code=422, detail=str(e))
+
     return await service.submit_report(data, image)
 
 
@@ -47,10 +56,8 @@ async def get_report(
     report_id: str,
     service: ReportsService = Depends(get_reports_service),
 ):
-    """Fetch a report by its server-side UUID."""
-    from fastapi import HTTPException
-    repo = service.repo
-    report = await repo.get_by_client_id(report_id)
+    """Fetch a report by its server-side or client-side UUID."""
+    report = await service.repo.get_by_client_id(report_id)
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
     return ReportsService._to_response(report)

@@ -61,37 +61,45 @@ class DraftQueueRepository {
   // ── Write ─────────────────────────────────────────────────────────────────
 
   /// Tries to upload the report directly to the backend (Neon/Supabase).
-  /// On failure, persists locally so the sync controller can retry later.
-  Future<void> saveDraft(ReportPayload payload) async {
+  /// On network failure, persists locally so the sync controller can retry later.
+  /// Does NOT throw after a successful local save — the report is safe either way.
+  Future<bool> saveDraft(ReportPayload payload) async {
     try {
       await _api.uploadInfrastructureReport(payload);
-    } on Exception {
-      // Store locally so pending reports survive and can be retried.
-      final companion = ReportDraftsCompanion.insert(
-        id: payload.id,
-        userId: payload.userId,
-        category: payload.category.name,
-        severity: payload.severity.name,
-        description: payload.description,
-        latitude: payload.capture.latitude,
-        longitude: payload.capture.longitude,
-        altitudeMeters: payload.capture.altitudeMeters,
-        accuracyMeters: payload.capture.accuracyMeters,
-        bearingDegrees: payload.capture.bearingDegrees,
-        speedMps: payload.capture.speedMps,
-        capturedAtUtc: payload.capture.capturedAtUtc,
-        imagePath: payload.imagePath,
-        thumbnailPath: Value(payload.thumbnailPath),
-        contractorId: Value(payload.contractorId),
-        infrastructureId: Value(payload.infrastructureId),
-        qualityGate: payload.qualityGate.name,
-        isGuest: payload.isGuest,
-        syncState: 'pending',
-        createdAtUtc: DateTime.now().toUtc(),
-        sensorData: Value(payload.sensorData),
-      );
-      await _dao.insertDraft(companion);
-      rethrow;
+      return true; // uploaded directly to server
+    } on Exception catch (e) {
+      // Server unreachable / error — save locally for retry
+      try {
+        final companion = ReportDraftsCompanion.insert(
+          id: payload.id,
+          userId: payload.userId,
+          category: payload.category.name,
+          severity: payload.severity.name,
+          description: payload.description,
+          latitude: payload.capture.latitude,
+          longitude: payload.capture.longitude,
+          altitudeMeters: payload.capture.altitudeMeters,
+          accuracyMeters: payload.capture.accuracyMeters,
+          bearingDegrees: payload.capture.bearingDegrees,
+          speedMps: payload.capture.speedMps,
+          capturedAtUtc: payload.capture.capturedAtUtc,
+          imagePath: payload.imagePath,
+          thumbnailPath: Value(payload.thumbnailPath),
+          contractorId: Value(payload.contractorId),
+          infrastructureId: Value(payload.infrastructureId),
+          qualityGate: payload.qualityGate.name,
+          isGuest: payload.isGuest,
+          syncState: 'pending',
+          createdAtUtc: DateTime.now().toUtc(),
+          sensorData: Value(payload.sensorData),
+        );
+        await _dao.insertDraft(companion);
+        // Saved locally — not an error from the user's perspective
+        return false; // indicate pending/local
+      } catch (localErr) {
+        // Both server AND local storage failed — this is a real error
+        throw Exception('Upload failed: $e | Local save also failed: $localErr');
+      }
     }
   }
 
