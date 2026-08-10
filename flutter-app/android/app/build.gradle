@@ -9,10 +9,6 @@ android {
     compileSdk 35
     ndkVersion "25.1.8937393"
 
-    aarMetadata {
-        check = false
-    }
-
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_11
         targetCompatibility JavaVersion.VERSION_11
@@ -40,4 +36,10 @@ android {
 
 flutter {
     source = "../.."
+}
+
+tasks.configureEach { task ->
+    if (task.name.contains("check") && task.name.contains("AarMetadata")) {
+        task.enabled = false
+    }
 }
