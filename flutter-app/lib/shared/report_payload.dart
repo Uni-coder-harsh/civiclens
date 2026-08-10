@@ -136,6 +136,7 @@ class ReportPayload {
   final String? infrastructureId;
   final ImageQualityGate qualityGate;
   final bool isGuest;
+  final String? sensorData;
 
   const ReportPayload({
     required this.id,
@@ -150,6 +151,7 @@ class ReportPayload {
     this.infrastructureId,
     required this.qualityGate,
     required this.isGuest,
+    this.sensorData,
   });
 
   Map<String, dynamic> toJson() => {
@@ -163,6 +165,7 @@ class ReportPayload {
         'is_guest': isGuest,
         'contractor_id': contractorId,
         'infrastructure_id': infrastructureId,
+        'sensor_data': sensorData,
       };
 
   factory ReportPayload.fromJson(Map<String, dynamic> json) => ReportPayload(
@@ -179,6 +182,7 @@ class ReportPayload {
         qualityGate:
             ImageQualityGate.values.byName(json['quality_gate'] as String),
         isGuest: json['is_guest'] as bool,
+        sensorData: json['sensor_data'] as String?,
       );
 }
 

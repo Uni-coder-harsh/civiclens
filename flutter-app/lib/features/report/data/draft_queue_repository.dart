@@ -81,6 +81,7 @@ class DraftQueueRepository {
       isGuest: payload.isGuest,
       syncState: 'pending',
       createdAtUtc: DateTime.now().toUtc(),
+      sensorData: Value(payload.sensorData),
     );
     await _dao.insertDraft(companion);
   }
@@ -126,6 +127,7 @@ class DraftQueueRepository {
       infrastructureId: row.infrastructureId,
       qualityGate: ImageQualityGate.values.byName(row.qualityGate),
       isGuest: row.isGuest,
+      sensorData: row.sensorData,
     );
   }
 

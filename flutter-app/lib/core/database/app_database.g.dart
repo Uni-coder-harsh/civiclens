@@ -150,6 +150,12 @@ class $ReportDraftsTable extends ReportDrafts
   late final GeneratedColumn<String> lastError = GeneratedColumn<String>(
       'last_error', aliasedName, true,
       type: DriftSqlType.string, requiredDuringInsert: false);
+  static const VerificationMeta _sensorDataMeta =
+      const VerificationMeta('sensorData');
+  @override
+  late final GeneratedColumn<String> sensorData = GeneratedColumn<String>(
+      'sensor_data', aliasedName, true,
+      type: DriftSqlType.string, requiredDuringInsert: false);
   @override
   List<GeneratedColumn> get $columns => [
         id,
@@ -174,7 +180,8 @@ class $ReportDraftsTable extends ReportDrafts
         createdAtUtc,
         syncedAtUtc,
         retryCount,
-        lastError
+        lastError,
+        sensorData
       ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -335,6 +342,12 @@ class $ReportDraftsTable extends ReportDrafts
       context.handle(_lastErrorMeta,
           lastError.isAcceptableOrUnknown(data['last_error']!, _lastErrorMeta));
     }
+    if (data.containsKey('sensor_data')) {
+      context.handle(
+          _sensorDataMeta,
+          sensorData.isAcceptableOrUnknown(
+              data['sensor_data']!, _sensorDataMeta));
+    }
     return context;
   }
 
@@ -390,6 +403,8 @@ class $ReportDraftsTable extends ReportDrafts
           .read(DriftSqlType.int, data['${effectivePrefix}retry_count'])!,
       lastError: attachedDatabase.typeMapping
           .read(DriftSqlType.string, data['${effectivePrefix}last_error']),
+      sensorData: attachedDatabase.typeMapping
+          .read(DriftSqlType.string, data['${effectivePrefix}sensor_data']),
     );
   }
 
@@ -423,6 +438,7 @@ class ReportDraft extends DataClass implements Insertable<ReportDraft> {
   final DateTime? syncedAtUtc;
   final int retryCount;
   final String? lastError;
+  final String? sensorData;
   const ReportDraft(
       {required this.id,
       required this.userId,
@@ -446,7 +462,8 @@ class ReportDraft extends DataClass implements Insertable<ReportDraft> {
       required this.createdAtUtc,
       this.syncedAtUtc,
       required this.retryCount,
-      this.lastError});
+      this.lastError,
+      this.sensorData});
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
@@ -482,6 +499,9 @@ class ReportDraft extends DataClass implements Insertable<ReportDraft> {
     map['retry_count'] = Variable<int>(retryCount);
     if (!nullToAbsent || lastError != null) {
       map['last_error'] = Variable<String>(lastError);
+    }
+    if (!nullToAbsent || sensorData != null) {
+      map['sensor_data'] = Variable<String>(sensorData);
     }
     return map;
   }
@@ -521,6 +541,9 @@ class ReportDraft extends DataClass implements Insertable<ReportDraft> {
       lastError: lastError == null && nullToAbsent
           ? const Value.absent()
           : Value(lastError),
+      sensorData: sensorData == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sensorData),
     );
   }
 
@@ -551,6 +574,7 @@ class ReportDraft extends DataClass implements Insertable<ReportDraft> {
       syncedAtUtc: serializer.fromJson<DateTime?>(json['syncedAtUtc']),
       retryCount: serializer.fromJson<int>(json['retryCount']),
       lastError: serializer.fromJson<String?>(json['lastError']),
+      sensorData: serializer.fromJson<String?>(json['sensorData']),
     );
   }
   @override
@@ -580,6 +604,7 @@ class ReportDraft extends DataClass implements Insertable<ReportDraft> {
       'syncedAtUtc': serializer.toJson<DateTime?>(syncedAtUtc),
       'retryCount': serializer.toJson<int>(retryCount),
       'lastError': serializer.toJson<String?>(lastError),
+      'sensorData': serializer.toJson<String?>(sensorData),
     };
   }
 
@@ -606,7 +631,8 @@ class ReportDraft extends DataClass implements Insertable<ReportDraft> {
           DateTime? createdAtUtc,
           Value<DateTime?> syncedAtUtc = const Value.absent(),
           int? retryCount,
-          Value<String?> lastError = const Value.absent()}) =>
+          Value<String?> lastError = const Value.absent(),
+          Value<String?> sensorData = const Value.absent()}) =>
       ReportDraft(
         id: id ?? this.id,
         userId: userId ?? this.userId,
@@ -635,6 +661,7 @@ class ReportDraft extends DataClass implements Insertable<ReportDraft> {
         syncedAtUtc: syncedAtUtc.present ? syncedAtUtc.value : this.syncedAtUtc,
         retryCount: retryCount ?? this.retryCount,
         lastError: lastError.present ? lastError.value : this.lastError,
+        sensorData: sensorData.present ? sensorData.value : this.sensorData,
       );
   ReportDraft copyWithCompanion(ReportDraftsCompanion data) {
     return ReportDraft(
@@ -681,6 +708,8 @@ class ReportDraft extends DataClass implements Insertable<ReportDraft> {
       retryCount:
           data.retryCount.present ? data.retryCount.value : this.retryCount,
       lastError: data.lastError.present ? data.lastError.value : this.lastError,
+      sensorData:
+          data.sensorData.present ? data.sensorData.value : this.sensorData,
     );
   }
 
@@ -709,7 +738,8 @@ class ReportDraft extends DataClass implements Insertable<ReportDraft> {
           ..write('createdAtUtc: $createdAtUtc, ')
           ..write('syncedAtUtc: $syncedAtUtc, ')
           ..write('retryCount: $retryCount, ')
-          ..write('lastError: $lastError')
+          ..write('lastError: $lastError, ')
+          ..write('sensorData: $sensorData')
           ..write(')'))
         .toString();
   }
@@ -738,7 +768,8 @@ class ReportDraft extends DataClass implements Insertable<ReportDraft> {
         createdAtUtc,
         syncedAtUtc,
         retryCount,
-        lastError
+        lastError,
+        sensorData
       ]);
   @override
   bool operator ==(Object other) =>
@@ -766,7 +797,8 @@ class ReportDraft extends DataClass implements Insertable<ReportDraft> {
           other.createdAtUtc == this.createdAtUtc &&
           other.syncedAtUtc == this.syncedAtUtc &&
           other.retryCount == this.retryCount &&
-          other.lastError == this.lastError);
+          other.lastError == this.lastError &&
+          other.sensorData == this.sensorData);
 }
 
 class ReportDraftsCompanion extends UpdateCompanion<ReportDraft> {
@@ -793,6 +825,7 @@ class ReportDraftsCompanion extends UpdateCompanion<ReportDraft> {
   final Value<DateTime?> syncedAtUtc;
   final Value<int> retryCount;
   final Value<String?> lastError;
+  final Value<String?> sensorData;
   final Value<int> rowid;
   const ReportDraftsCompanion({
     this.id = const Value.absent(),
@@ -818,6 +851,7 @@ class ReportDraftsCompanion extends UpdateCompanion<ReportDraft> {
     this.syncedAtUtc = const Value.absent(),
     this.retryCount = const Value.absent(),
     this.lastError = const Value.absent(),
+    this.sensorData = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   ReportDraftsCompanion.insert({
@@ -844,6 +878,7 @@ class ReportDraftsCompanion extends UpdateCompanion<ReportDraft> {
     this.syncedAtUtc = const Value.absent(),
     this.retryCount = const Value.absent(),
     this.lastError = const Value.absent(),
+    this.sensorData = const Value.absent(),
     this.rowid = const Value.absent(),
   })  : id = Value(id),
         userId = Value(userId),
@@ -886,6 +921,7 @@ class ReportDraftsCompanion extends UpdateCompanion<ReportDraft> {
     Expression<DateTime>? syncedAtUtc,
     Expression<int>? retryCount,
     Expression<String>? lastError,
+    Expression<String>? sensorData,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -912,6 +948,7 @@ class ReportDraftsCompanion extends UpdateCompanion<ReportDraft> {
       if (syncedAtUtc != null) 'synced_at_utc': syncedAtUtc,
       if (retryCount != null) 'retry_count': retryCount,
       if (lastError != null) 'last_error': lastError,
+      if (sensorData != null) 'sensor_data': sensorData,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -940,6 +977,7 @@ class ReportDraftsCompanion extends UpdateCompanion<ReportDraft> {
       Value<DateTime?>? syncedAtUtc,
       Value<int>? retryCount,
       Value<String?>? lastError,
+      Value<String?>? sensorData,
       Value<int>? rowid}) {
     return ReportDraftsCompanion(
       id: id ?? this.id,
@@ -965,6 +1003,7 @@ class ReportDraftsCompanion extends UpdateCompanion<ReportDraft> {
       syncedAtUtc: syncedAtUtc ?? this.syncedAtUtc,
       retryCount: retryCount ?? this.retryCount,
       lastError: lastError ?? this.lastError,
+      sensorData: sensorData ?? this.sensorData,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -1041,6 +1080,9 @@ class ReportDraftsCompanion extends UpdateCompanion<ReportDraft> {
     if (lastError.present) {
       map['last_error'] = Variable<String>(lastError.value);
     }
+    if (sensorData.present) {
+      map['sensor_data'] = Variable<String>(sensorData.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -1073,6 +1115,7 @@ class ReportDraftsCompanion extends UpdateCompanion<ReportDraft> {
           ..write('syncedAtUtc: $syncedAtUtc, ')
           ..write('retryCount: $retryCount, ')
           ..write('lastError: $lastError, ')
+          ..write('sensorData: $sensorData, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1115,6 +1158,7 @@ typedef $$ReportDraftsTableCreateCompanionBuilder = ReportDraftsCompanion
   Value<DateTime?> syncedAtUtc,
   Value<int> retryCount,
   Value<String?> lastError,
+  Value<String?> sensorData,
   Value<int> rowid,
 });
 typedef $$ReportDraftsTableUpdateCompanionBuilder = ReportDraftsCompanion
@@ -1142,6 +1186,7 @@ typedef $$ReportDraftsTableUpdateCompanionBuilder = ReportDraftsCompanion
   Value<DateTime?> syncedAtUtc,
   Value<int> retryCount,
   Value<String?> lastError,
+  Value<String?> sensorData,
   Value<int> rowid,
 });
 
@@ -1226,6 +1271,9 @@ class $$ReportDraftsTableFilterComposer
 
   ColumnFilters<String> get lastError => $composableBuilder(
       column: $table.lastError, builder: (column) => ColumnFilters(column));
+
+  ColumnFilters<String> get sensorData => $composableBuilder(
+      column: $table.sensorData, builder: (column) => ColumnFilters(column));
 }
 
 class $$ReportDraftsTableOrderingComposer
@@ -1313,6 +1361,9 @@ class $$ReportDraftsTableOrderingComposer
 
   ColumnOrderings<String> get lastError => $composableBuilder(
       column: $table.lastError, builder: (column) => ColumnOrderings(column));
+
+  ColumnOrderings<String> get sensorData => $composableBuilder(
+      column: $table.sensorData, builder: (column) => ColumnOrderings(column));
 }
 
 class $$ReportDraftsTableAnnotationComposer
@@ -1392,6 +1443,9 @@ class $$ReportDraftsTableAnnotationComposer
 
   GeneratedColumn<String> get lastError =>
       $composableBuilder(column: $table.lastError, builder: (column) => column);
+
+  GeneratedColumn<String> get sensorData => $composableBuilder(
+      column: $table.sensorData, builder: (column) => column);
 }
 
 class $$ReportDraftsTableTableManager extends RootTableManager<
@@ -1443,6 +1497,7 @@ class $$ReportDraftsTableTableManager extends RootTableManager<
             Value<DateTime?> syncedAtUtc = const Value.absent(),
             Value<int> retryCount = const Value.absent(),
             Value<String?> lastError = const Value.absent(),
+            Value<String?> sensorData = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               ReportDraftsCompanion(
@@ -1469,6 +1524,7 @@ class $$ReportDraftsTableTableManager extends RootTableManager<
             syncedAtUtc: syncedAtUtc,
             retryCount: retryCount,
             lastError: lastError,
+            sensorData: sensorData,
             rowid: rowid,
           ),
           createCompanionCallback: ({
@@ -1495,6 +1551,7 @@ class $$ReportDraftsTableTableManager extends RootTableManager<
             Value<DateTime?> syncedAtUtc = const Value.absent(),
             Value<int> retryCount = const Value.absent(),
             Value<String?> lastError = const Value.absent(),
+            Value<String?> sensorData = const Value.absent(),
             Value<int> rowid = const Value.absent(),
           }) =>
               ReportDraftsCompanion.insert(
@@ -1521,6 +1578,7 @@ class $$ReportDraftsTableTableManager extends RootTableManager<
             syncedAtUtc: syncedAtUtc,
             retryCount: retryCount,
             lastError: lastError,
+            sensorData: sensorData,
             rowid: rowid,
           ),
           withReferenceMapper: (p0) => p0

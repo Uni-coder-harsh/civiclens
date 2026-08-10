@@ -32,6 +32,7 @@ class ReportDrafts extends Table {
   DateTimeColumn get syncedAtUtc => dateTime().nullable()();
   IntColumn get retryCount => integer().withDefault(const Constant(0))();
   TextColumn get lastError => text().nullable()();
+  TextColumn get sensorData => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -42,7 +43,19 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? e]) : super(e ?? _openConnection());
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onCreate: (m) async {
+          await m.createAll();
+        },
+        onUpgrade: (m, from, to) async {
+          if (from < 2) {
+            await m.addColumn(reportDrafts, reportDrafts.sensorData);
+          }
+        },
+      );
 
   Future<int> insertOrUpdateDraft(ReportDraftsCompanion draft) {
     return into(reportDrafts).insertOnConflictUpdate(draft);
