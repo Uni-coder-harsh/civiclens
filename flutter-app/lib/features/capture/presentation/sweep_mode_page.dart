@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:math';
 
 import 'package:camera/camera.dart';
@@ -6,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sensors_plus/sensors_plus.dart';
+import 'package:uuid/uuid.dart';
 
 import 'package:geolocator/geolocator.dart';
 
@@ -16,6 +18,7 @@ import '../../../shared/contractor.dart';
 import '../../../core/sensor/sensor_processing_service.dart';
 import '../../../core/network/api_providers.dart';
 import '../../report/data/draft_queue_repository.dart';
+import '../../report/application/sync_controller.dart';
 import '../../auth/application/auth_controller.dart';
 
 /// Sweep Mode / Mobile Road Scan Page
@@ -91,6 +94,16 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
   Timer? _overlayVisualTimer;
   Timer? _overlayVibrationTimer;
 
+  // Calibration & Adaptive rolling queue variables
+  bool _isCalibrating = true;
+  int _calibrationTimeRemaining = 20;
+  double _calibratedDistance = 1.5;
+  final List<double> _detectedDistances = [];
+  final List<Map<String, dynamic>> _calibrationVisualEvents = [];
+  final List<int> _calibrationVibrationEvents = [];
+  final List<Map<String, dynamic>> _rollingFrameQueue = [];
+  Timer? _calibrationTimer;
+
   void _showVisualOverlay(String text) {
     _overlayVisualTimer?.cancel();
     setState(() {
@@ -119,6 +132,46 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
     });
   }
 
+  void _startCalibrationTimer() {
+    _calibrationTimer?.cancel();
+    setState(() {
+      _isCalibrating = true;
+      _calibrationTimeRemaining = 20;
+      _detectedDistances.clear();
+      _calibrationVisualEvents.clear();
+      _calibrationVibrationEvents.clear();
+      _rollingFrameQueue.clear();
+    });
+    
+    _calibrationTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted || !_isSweeping) {
+        timer.cancel();
+        return;
+      }
+      
+      setState(() {
+        if (_calibrationTimeRemaining > 1) {
+          _calibrationTimeRemaining--;
+        } else {
+          _calibrationTimeRemaining = 0;
+          _isCalibrating = false;
+          timer.cancel();
+          _finalizeCalibration();
+        }
+      });
+    });
+  }
+
+  void _finalizeCalibration() {
+    if (_detectedDistances.isNotEmpty) {
+      final sum = _detectedDistances.reduce((a, b) => a + b);
+      _calibratedDistance = (sum / _detectedDistances.length).clamp(0.5, 10.0);
+    } else {
+      _calibratedDistance = 1.5; // Default fallback distance (meters)
+    }
+    _addLog('Calibration locked: Calculated effective camera-to-wheel distance = ${_calibratedDistance.toStringAsFixed(1)}m');
+  }
+
   void _addLog(String msg) {
     final time = DateTime.now().toLocal().toString().split(' ').last.substring(0, 8);
     if (mounted) {
@@ -144,19 +197,20 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
     WidgetsBinding.instance.removeObserver(this);
     _stopSweep();
     _cameraController?.dispose();
+    _cameraController = null;
     _overlayVisualTimer?.cancel();
     _overlayVibrationTimer?.cancel();
+    _calibrationTimer?.cancel();
+    _calibrationTimer = null;
     super.dispose();
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      return;
-    }
     if (state == AppLifecycleState.inactive) {
       _stopSweep();
       _cameraController?.dispose();
+      _cameraController = null;
     } else if (state == AppLifecycleState.resumed) {
       _initialise();
     }
@@ -227,6 +281,7 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
     });
 
     _addLog('Scanning started (Vehicle: $_selectedVehicle, Mount: $_selectedMount)');
+    _startCalibrationTimer();
 
     // Start GPS stream
     _geoService.startStream();
@@ -317,6 +372,8 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
     if (!_isSweeping) return;
 
     _addLog('Scanning stopped. Initiating processing state...');
+    _calibrationTimer?.cancel();
+    _calibrationTimer = null;
 
     setState(() {
       _isSweeping = false;
@@ -334,6 +391,17 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
     _gpsSub?.cancel();
     _gpsSub = null;
     _geoService.stopStream();
+
+    // Clean up rolling frame cache files to prevent storage leak
+    for (final frame in _rollingFrameQueue) {
+      try {
+        final file = File(frame['path'] as String);
+        if (await file.exists()) {
+          await file.delete();
+        }
+      } catch (_) {}
+    }
+    _rollingFrameQueue.clear();
 
     // Step 1: Compiling road sensor data
     await Future.delayed(const Duration(milliseconds: 1000));
@@ -386,6 +454,32 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
     });
   }
 
+  void _stopSweepWithoutSummary() {
+    _calibrationTimer?.cancel();
+    _calibrationTimer = null;
+    _isSweeping = false;
+    _loopActive = false;
+    _accelSub?.cancel();
+    _accelSub = null;
+    _gyroSub?.cancel();
+    _gyroSub = null;
+    _gpsBadgeSub?.cancel();
+    _gpsBadgeSub = null;
+    _gpsSub?.cancel();
+    _gpsSub = null;
+    _geoService.stopStream();
+
+    for (final frame in _rollingFrameQueue) {
+      try {
+        final file = File(frame['path'] as String);
+        if (file.existsSync()) {
+          file.deleteSync();
+        }
+      } catch (_) {}
+    }
+    _rollingFrameQueue.clear();
+  }
+
   Future<void> _updateCoordinates() async {
     try {
       final pos = await Geolocator.getCurrentPosition(
@@ -406,44 +500,147 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
   }
 
   void _correlateVisualAndVibration(int vibTimeMs, double vibScore) {
-    if (_lastVisualEvent == null) return;
+    if (_isCalibrating) {
+      // ── Calibration Phase ──
+      _calibrationVibrationEvents.add(vibTimeMs);
+      final closestVisuals = _calibrationVisualEvents
+          .where((e) => (e['timestamp_ms'] as int) < vibTimeMs)
+          .toList();
+      if (closestVisuals.isNotEmpty) {
+        final lastVis = closestVisuals.last;
+        final delaySec = (vibTimeMs - (lastVis['timestamp_ms'] as int)) / 1000.0;
+        if (delaySec > 0 && delaySec < 6.0) {
+          final currentSpeed = max(_speed, 1.5);
+          final distance = delaySec * currentSpeed;
+          _detectedDistances.add(distance);
+          _addLog('Calibration event: Speed = ${currentSpeed.toStringAsFixed(1)} m/s, Delay = ${delaySec.toStringAsFixed(1)}s, Distance = ${distance.toStringAsFixed(1)}m');
+        }
+      }
 
-    final visualTimeMs = _lastVisualEvent!['timestamp_ms'] as int;
-    final visualConfidence = _lastVisualEvent!['confidence'] as double;
-    final visualClass = _lastVisualEvent!['class'] as String;
-    final imagePath = _lastVisualEvent!['image_path'] as String;
+      if (_lastVisualEvent == null) return;
 
-    final quality = _sensorService.calculateQuality(
-      gpsAccuracyMeters: _gpsAccuracy,
-      actualSampleRateHz: _actualSamplingRate,
-      requestSampleRateHz: 50.0,
-      mountType: _selectedMount,
-    );
+      final visualTimeMs = _lastVisualEvent!['timestamp_ms'] as int;
+      final visualConfidence = _lastVisualEvent!['confidence'] as double;
+      final visualClass = _lastVisualEvent!['class'] as String;
+      final imagePath = _lastVisualEvent!['image_path'] as String;
 
-    final mme = _sensorService.correlateEvent(
-      vibrationTimeMs: vibTimeMs,
-      vibrationScore: vibScore,
-      latitude: _latitude,
-      longitude: _longitude,
-      speedMps: _speed,
-      quality: quality,
-      visualTimeMs: visualTimeMs,
-      visualConfidence: visualConfidence,
-      visualClass: visualClass,
-      imagePath: imagePath,
-    );
+      final quality = _sensorService.calculateQuality(
+        gpsAccuracyMeters: _gpsAccuracy,
+        actualSampleRateHz: _actualSamplingRate,
+        requestSampleRateHz: 50.0,
+        mountType: _selectedMount,
+      );
 
-    if (mme != null) {
-      setState(() {
-        _correlatedEvents.add(mme);
-      });
-      _addLog('Link: Aligned vibration with $visualClass (Confidence: ${(mme.fusedEvidenceScore * 100).toStringAsFixed(0)}%)');
-      _saveMultimodalDraft(mme);
+      final mme = _sensorService.correlateEvent(
+        vibrationTimeMs: vibTimeMs,
+        vibrationScore: vibScore,
+        latitude: _latitude,
+        longitude: _longitude,
+        speedMps: _speed,
+        quality: quality,
+        visualTimeMs: visualTimeMs,
+        visualConfidence: visualConfidence,
+        visualClass: visualClass,
+        imagePath: imagePath,
+      );
+
+      if (mme != null) {
+        setState(() {
+          _correlatedEvents.add(mme);
+        });
+        _addLog('Link: Aligned vibration with $visualClass (Confidence: ${(mme.fusedEvidenceScore * 100).toStringAsFixed(0)}%)');
+        _saveMultimodalDraft(mme);
+      }
+    } else {
+      // ── Adaptive Queue Phase ──
+      // Dynamic velocity-dependent delay: delay = distance / speed
+      final currentSpeed = max(_speed, 1.5);
+      final dynamicDelaySec = _calibratedDistance / currentSpeed;
+      final targetTimeMs = vibTimeMs - (dynamicDelaySec * 1000).toInt();
+      
+      // Dynamic search window tolerance proportional to speed/delay
+      final searchToleranceMs = (dynamicDelaySec * 0.5 * 1000).clamp(500.0, 2000.0).toInt();
+
+      // Find the closest frame in the rolling queue
+      Map<String, dynamic>? matchingFrame;
+      int minDiff = 999999;
+      
+      for (final frame in _rollingFrameQueue) {
+        final diff = ((frame['timestamp_ms'] as int) - targetTimeMs).abs();
+        if (diff < minDiff) {
+          minDiff = diff;
+          matchingFrame = frame;
+        }
+      }
+      
+      if (matchingFrame != null && minDiff < searchToleranceMs) {
+        final bool frameHasDefect = matchingFrame['has_defect'] as bool;
+        
+        if (frameHasDefect) {
+          final String defectType = matchingFrame['defect_class'] as String;
+          final double conf = matchingFrame['confidence'] as double;
+          final String imgPath = matchingFrame['path'] as String;
+          
+          final quality = _sensorService.calculateQuality(
+            gpsAccuracyMeters: _gpsAccuracy,
+            actualSampleRateHz: _actualSamplingRate,
+            requestSampleRateHz: 50.0,
+            mountType: _selectedMount,
+          );
+
+          final mme = _sensorService.correlateEvent(
+            vibrationTimeMs: vibTimeMs,
+            vibrationScore: vibScore,
+            latitude: _latitude,
+            longitude: _longitude,
+            speedMps: _speed,
+            quality: quality,
+            visualTimeMs: matchingFrame['timestamp_ms'] as int,
+            visualConfidence: conf,
+            visualClass: defectType,
+            imagePath: imgPath,
+          );
+          
+          if (mme != null) {
+            setState(() {
+              _correlatedEvents.add(mme);
+            });
+            _addLog('Link: Aligned vibration with $defectType (Adaptive Queue matched at speed ${currentSpeed.toStringAsFixed(1)} m/s)');
+            _saveMultimodalDraft(mme);
+          }
+        }
+      }
     }
   }
 
   Future<void> _saveMultimodalDraft(MultimodalRoadEvent mme) async {
     final session = ref.read(authSessionProvider);
+    
+    // Construct rich JSON representation of raw sensors and visual analytics
+    final Map<String, dynamic> sensorTelemetry = {
+      'device_sensor_rate_hz': _actualSamplingRate,
+      'vehicle_type': _selectedVehicle,
+      'mount_type': _selectedMount,
+      'calibrated_wheel_distance_meters': _calibratedDistance,
+      'vibration': {
+        'timestamp_ms': mme.timestampMs,
+        'z_score': mme.vibrationScore,
+        'sensor_quality': mme.sensorQuality,
+      },
+      'camera': {
+        'defect_class': mme.visualClass,
+        'ai_confidence': mme.cameraConfidence,
+        'visual_timestamp_ms': mme.timestampMs - (_calibratedDistance / max(_speed, 1.5) * 1000).toInt(),
+      },
+      'location': {
+        'latitude': mme.latitude,
+        'longitude': mme.longitude,
+        'speed_mps': mme.speedMps,
+        'gps_accuracy_meters': _gpsAccuracy,
+      }
+    };
+    final sensorDataString = jsonEncode(sensorTelemetry);
+
     final payload = ReportPayload(
       id: mme.id,
       userId: session.userId,
@@ -466,12 +663,16 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
       imagePath: mme.imagePath ?? '',
       qualityGate: ImageQualityGate.ok,
       isGuest: session.isGuest,
+      sensorData: sensorDataString,
     );
 
     try {
       final repo = ref.read(draftQueueRepositoryProvider);
       await repo.saveDraft(payload);
       _addLog('Draft: Linked event saved to local SQLite draft queue');
+      
+      // Auto-trigger sync to update database and S3 immediately
+      ref.read(syncControllerProvider.notifier).syncAll();
     } catch (e) {
       _addLog('Error: Failed to save draft: $e');
     }
@@ -487,31 +688,74 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
   }
 
   Future<void> _captureFrame() async {
-    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+    if (_cameraController == null ||
+        !_cameraController!.value.isInitialized ||
+        _cameraController!.value.isTakingPicture) {
       return;
     }
 
     try {
       final xFile = await _cameraController!.takePicture();
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
 
       // Mock visual AI checks
       final hasVisualDefect = Random().nextDouble() > 0.6; // 40% chance of visual defect
       final confidence = hasVisualDefect ? 0.7 + Random().nextDouble() * 0.25 : 0.0;
       final defectClass = hasVisualDefect ? (Random().nextBool() ? 'pothole' : 'crack') : 'none';
 
-      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      final frameData = {
+        'path': xFile.path,
+        'timestamp_ms': nowMs,
+        'has_defect': hasVisualDefect,
+        'defect_class': defectClass,
+        'confidence': confidence,
+      };
 
-      _addLog('Camera: Frame #${_captureCount + 1} captured');
+      if (_isCalibrating) {
+        _addLog('Camera: Frame #${_captureCount + 1} captured (Calibration)');
+        if (hasVisualDefect) {
+          _lastVisualEvent = frameData;
+          _calibrationVisualEvents.add(frameData);
+          _showVisualOverlay('AI: ${defectClass.toUpperCase()} detected (Conf: ${(confidence * 100).toStringAsFixed(0)}%)');
+          
+          // During calibration phase, save visual defects directly as baseline
+          final mme = MultimodalRoadEvent(
+            id: const Uuid().v4(),
+            timestampMs: nowMs,
+            latitude: _latitude,
+            longitude: _longitude,
+            speedMps: _speed,
+            cameraConfidence: confidence,
+            vibrationScore: 0.0,
+            sensorQuality: 0.9,
+            fusedEvidenceScore: confidence,
+            visualClass: defectClass,
+            imagePath: xFile.path,
+          );
+          _saveMultimodalDraft(mme);
+        }
+      } else {
+        _addLog('Camera: Frame #${_captureCount + 1} captured (Rolling Queue)');
+        _rollingFrameQueue.add(frameData);
 
-      if (hasVisualDefect) {
-        _lastVisualEvent = {
-          'timestamp_ms': nowMs,
-          'confidence': confidence,
-          'class': defectClass,
-          'image_path': xFile.path,
-        };
-        _addLog('AI: Detected $defectClass (Conf: ${(confidence * 100).toStringAsFixed(0)}%)');
-        _showVisualOverlay('AI: ${defectClass.toUpperCase()} detected (Conf: ${(confidence * 100).toStringAsFixed(0)}%)');
+        if (hasVisualDefect) {
+          _showVisualOverlay('AI: ${defectClass.toUpperCase()} detected (Queueing)');
+        }
+
+        // Keep rolling cache limited to delay + 2 seconds and delete older files
+        final limitMs = (_calibratedDelaySeconds + 2.0) * 1000.0;
+        while (_rollingFrameQueue.isNotEmpty &&
+               (nowMs - (_rollingFrameQueue.first['timestamp_ms'] as int)) > limitMs) {
+          final oldFrame = _rollingFrameQueue.removeAt(0);
+          try {
+            final file = File(oldFrame['path'] as String);
+            if (await file.exists()) {
+              await file.delete();
+            }
+          } catch (e) {
+            debugPrint('Error deleting cached frame: $e');
+          }
+        }
       }
 
       if (mounted) {
@@ -1068,7 +1312,15 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
       fit: StackFit.expand,
       children: [
         // ── Camera preview ──
-        CameraPreview(_cameraController!),
+        if (_cameraController != null && _cameraController!.value.isInitialized)
+          CameraPreview(_cameraController!)
+        else
+          const Center(
+            child: Text(
+              'Initialising camera preview...',
+              style: TextStyle(color: Colors.white70, fontFamily: 'Inter', fontSize: 13),
+            ),
+          ),
 
         // ── Thin rule-of-thirds overlay ──
         CustomPaint(
@@ -1175,9 +1427,25 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text(
-                            'REAL-TIME SENSOR DIAGNOSTICS',
-                            style: TextStyle(color: Color(0xFF64748B), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1.0),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'REAL-TIME SENSOR DIAGNOSTICS',
+                                style: TextStyle(color: Color(0xFF64748B), fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _isCalibrating
+                                    ? 'CALIBRATING: $_calibrationTimeRemaining s remaining'
+                                    : 'CALIBRATION LOCKED: ${_calibratedDistance.toStringAsFixed(1)}m wheel-to-cam dist',
+                                style: TextStyle(
+                                  color: _isCalibrating ? const Color(0xFFFBBF24) : const Color(0xFF60A5FA),
+                                  fontSize: 8,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
                           ),
                           Text(
                             'Sampling: ${_actualSamplingRate.toStringAsFixed(0)} Hz',
@@ -1311,9 +1579,32 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
               isSweeping: _isSweeping,
               captureCount: _captureCount,
               sweepStartTime: _sweepStartTime,
-              onClose: () {
+              onClose: () async {
                 if (_isSweeping) {
-                  _stopSweep();
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      backgroundColor: const Color(0xFF1E293B),
+                      title: const Text('Exit Scan Mode?', style: TextStyle(color: Colors.white)),
+                      content: const Text('Are you sure you want to discard this scanning session? Unsaved data will be lost.', style: TextStyle(color: Colors.white70)),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Discard & Exit', style: TextStyle(color: Colors.redAccent)),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirm == true) {
+                    _stopSweepWithoutSummary();
+                    if (context.mounted) {
+                      context.pop();
+                    }
+                  }
                 } else {
                   context.pop();
                 }
