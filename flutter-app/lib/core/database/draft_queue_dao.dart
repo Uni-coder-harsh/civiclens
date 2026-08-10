@@ -16,8 +16,6 @@ class DraftQueueDao {
     return (_db.select(_db.reportDrafts)
           ..where((t) => t.syncState.isNotIn(['synced']))
           ..orderBy([
-            // critical first (alphabetically 'critical' sorts before others only
-            // by luck; we use a CASE expression via custom SQL ordering)
             (t) => OrderingTerm(
                   expression: t.severity.caseMatch<int>(
                     when: {const Constant('critical'): const Constant(0)},
@@ -25,6 +23,23 @@ class DraftQueueDao {
                   ),
                 ),
             (t) => OrderingTerm(expression: t.createdAtUtc),
+          ]))
+        .watch();
+  }
+
+  /// Streams ALL drafts (including synced ones), ordered: critical first,
+  /// then descending by [createdAtUtc].
+  Stream<List<ReportDraft>> watchAll() {
+    return (_db.select(_db.reportDrafts)
+          ..orderBy([
+            (t) => OrderingTerm(
+                  expression: t.severity.caseMatch<int>(
+                    when: {const Constant('critical'): const Constant(0)},
+                    orElse: const Constant(1),
+                  ),
+                ),
+            (t) => OrderingTerm(
+                expression: t.createdAtUtc, mode: OrderingMode.desc),
           ]))
         .watch();
   }

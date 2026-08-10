@@ -43,9 +43,9 @@ class DraftQueueRepository {
         );
   }
 
-  /// Reactive stream of all non-synced drafts as [DraftItem] (includes syncState).
+  /// Reactive stream of all drafts as [DraftItem] (includes syncState & synced history).
   Stream<List<DraftItem>> watchDraftItems() {
-    return _dao.watchPending().map(
+    return _dao.watchAll().map(
           (rows) => rows.map(_rowToDraftItem).toList(),
         );
   }

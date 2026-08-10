@@ -150,6 +150,8 @@ class DraftQueuePage extends ConsumerWidget {
                   items.where((d) => d.syncState == SyncState.failed).toList();
               final pending =
                   items.where((d) => d.syncState == SyncState.pending).toList();
+              final synced =
+                  items.where((d) => d.syncState == SyncState.synced).toList();
 
               final sections = <Widget>[];
               if (uploading.isNotEmpty) {
@@ -178,6 +180,15 @@ class DraftQueuePage extends ConsumerWidget {
                   count: pending.length,
                 ));
                 sections.addAll(pending.map((d) => _DraftCard(item: d)));
+              }
+              if (synced.isNotEmpty) {
+                sections.add(_SectionHeader(
+                  label: 'Active & Synced Reports',
+                  icon: Icons.check_circle_rounded,
+                  color: const Color(0xFF22C55E),
+                  count: synced.length,
+                ));
+                sections.addAll(synced.map((d) => _DraftCard(item: d)));
               }
 
               return SliverPadding(

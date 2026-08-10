@@ -1,7 +1,7 @@
 import os
 import uuid
 
-from fastapi import UploadFile
+from fastapi import HTTPException, UploadFile
 from loguru import logger
 
 from app.modules.reports.model import CivicReport
@@ -27,40 +27,60 @@ class ReportsService:
             )
             return self._to_response(existing)
 
-        # ── Image upload ───────────────────────────────────────────────────────
-        image_url: str | None = None
-        if image and image.filename:
-            logger.info(
-                f"[Reports] 📷  Uploading image for client_id={data.id} "
-                f"filename={image.filename} content_type={image.content_type}"
+        # ── MANDATORY Image Validation & Upload ────────────────────────────────
+        if not image or not image.filename:
+            logger.error(
+                f"[Reports] ❌ Image missing for client_id={data.id}. Image is mandatory for report submission."
             )
-            image_url = await self._upload_image(image, data.id)
-        else:
-            logger.info(f"[Reports] 📷  No image provided for client_id={data.id}")
+            raise HTTPException(
+                status_code=400,
+                detail="Image file is mandatory for report submission."
+            )
 
-        # ── Persist report ────────────────────────────────────────────────────
+        logger.info(
+            f"[Reports] 📷 Uploading mandatory image for client_id={data.id} "
+            f"filename={image.filename} content_type={image.content_type}"
+        )
+
+        image_url = await self._upload_image(image, data.id)
+        if not image_url:
+            logger.error(
+                f"[Reports] ❌ Storage upload failed for client_id={data.id}. "
+                "Rejecting report creation so client marks report as failed."
+            )
+            raise HTTPException(
+                status_code=500,
+                detail="Image upload to storage failed. Report submission rejected."
+            )
+
+        # ── Persist report to DB ─────────────────────────────────────────────
         report = await self.repo.create(data, image_url)
         logger.info(
-            f"[Reports] ✅  Report saved to Neon DB | "
+            f"[Reports] ✅ Report saved to Neon DB | "
             f"report_id={report.id} category={report.category} "
             f"severity={report.severity} lat={data.capture.latitude:.5f} "
             f"lng={data.capture.longitude:.5f} "
-            f"image={'uploaded ✓' if image_url else 'none'} "
+            f"image={image_url} "
             f"user_id={data.user_id} is_guest={data.is_guest}"
         )
         return self._to_response(report)
 
     async def _upload_image(self, image: UploadFile, report_id: str) -> str | None:
         """Upload image to Supabase S3-compatible storage. Returns public URL or None."""
-        supabase_url = os.environ.get("SUPABASE_URL", "")
-        supabase_key = os.environ.get("SUPABASE_SERVICE_KEY", "")
+        raw_url = os.environ.get("SUPABASE_URL", "").strip()
+        supabase_key = os.environ.get("SUPABASE_SERVICE_KEY", "").strip()
 
-        if not supabase_url or not supabase_key:
+        if not raw_url or not supabase_key:
             logger.warning(
-                "[Reports] ⚠️  SUPABASE_URL or SUPABASE_SERVICE_KEY not set — "
-                "skipping image upload. Set these env vars in Railway to enable storage."
+                "[Reports] ⚠️ SUPABASE_URL or SUPABASE_SERVICE_KEY not set in environment."
             )
             return None
+
+        # Sanitize SUPABASE_URL if set to S3 endpoint or storage URL
+        supabase_url = raw_url
+        if "/storage/v1" in supabase_url:
+            supabase_url = supabase_url.split("/storage/v1")[0]
+        supabase_url = supabase_url.replace("storage.supabase.co", "supabase.co").rstrip("/")
 
         try:
             from supabase import create_client  # type: ignore
@@ -78,21 +98,21 @@ class ReportsService:
             )
             public_url = client.storage.from_(bucket).get_public_url(path)
             logger.info(
-                f"[Reports] ☁️  Image uploaded to Supabase Storage | "
+                f"[Reports] ☁️ Image uploaded to Supabase Storage | "
                 f"report_id={report_id} bucket={bucket} path={path} "
                 f"size={len(content)} bytes url={public_url}"
             )
             return public_url
         except ImportError:
             logger.error(
-                "[Reports] ❌  supabase Python package missing — "
+                "[Reports] ❌ supabase Python package missing — "
                 "add `supabase==2.10.0` to requirements.txt and rebuild."
             )
             return None
         except Exception as e:
-            logger.warning(
-                f"[Reports] ⚠️  Image upload to Supabase failed (non-fatal) | "
-                f"report_id={report_id} error={e}"
+            logger.error(
+                f"[Reports] ❌ Image upload to Supabase failed | "
+                f"report_id={report_id} url={supabase_url} error={e}"
             )
             return None
 

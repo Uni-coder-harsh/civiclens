@@ -804,9 +804,49 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
 
   @override
   Widget build(BuildContext context) {
+    return PopScope(
+      canPop: !_isSweeping && !_isProcessing,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        if (_isSweeping || _isProcessing) {
+          _stopSweepWithoutSummary();
+          if (mounted && context.mounted) {
+            context.pop();
+          }
+        } else if (_showSummary) {
+          setState(() {
+            _showSummary = false;
+          });
+          if (mounted && context.mounted) {
+            context.pop();
+          }
+        } else {
+          if (mounted && context.mounted) {
+            context.pop();
+          }
+        }
+      },
+      child: _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     if (_isProcessing) {
       return Scaffold(
         backgroundColor: const Color(0xFF0F172A),
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.close, color: Colors.white),
+            onPressed: () {
+              _stopSweepWithoutSummary();
+              if (mounted && context.mounted) {
+                context.pop();
+              }
+            },
+          ),
+        ),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -853,6 +893,19 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                       backgroundColor: const Color(0xFF1E293B),
                       color: const Color(0xFF4F46E5),
                     ),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _isProcessing = false;
+                      _showSummary = true;
+                    });
+                  },
+                  child: const Text(
+                    'Skip to Summary',
+                    style: TextStyle(color: Color(0xFF818CF8), fontSize: 13),
                   ),
                 ),
               ],
@@ -1582,7 +1635,7 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                       title: const Text('Exit Scan Mode?',
                           style: TextStyle(color: Colors.white)),
                       content: const Text(
-                          'Are you sure you want to discard this scanning session? Unsaved data will be lost.',
+                          'Are you sure you want to exit this scanning session?',
                           style: TextStyle(color: Colors.white70)),
                       actions: [
                         TextButton(
@@ -1592,7 +1645,7 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                         ),
                         TextButton(
                           onPressed: () => Navigator.pop(context, true),
-                          child: const Text('Discard & Exit',
+                          child: const Text('Exit',
                               style: TextStyle(color: Colors.redAccent)),
                         ),
                       ],
@@ -1605,7 +1658,10 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                     }
                   }
                 } else {
-                  context.pop();
+                  _stopSweepWithoutSummary();
+                  if (context.mounted) {
+                    context.pop();
+                  }
                 }
               },
             ),
