@@ -50,6 +50,7 @@ class ReportPayloadSchema(BaseModel):
     is_guest: bool
     contractor_id: Optional[str] = None
     infrastructure_id: Optional[str] = None
+    sensor_data: Optional[str] = None
 
 class SlaClockSchema(BaseModel):
     stage: str
@@ -414,7 +415,7 @@ async def upload_infrastructure_report(request: Request, db: AsyncSession = Depe
             description=payload.description,
             detected_severity=detected_sev,
             assigned_severity=detected_sev,
-            notes="Submitted via mobile integration client."
+            notes=payload.sensor_data or "Submitted via mobile integration client."
         )
         db.add(inspection_item)
         await db.flush()
@@ -1666,7 +1667,8 @@ async def update_profile(body: UpdateProfileRequest, db: AsyncSession = Depends(
         "isIdentityVerified": True,
         "phoneNumber": user.phone_number,
         "displayName": user.full_name,
-        "email": user.email
+        "email": user.email,
+        "avatarUrl": user.avatar_url
     }
 
 
