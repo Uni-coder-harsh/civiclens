@@ -196,13 +196,28 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _stopSweep();
+    
+    // Stop all streams and timers directly to avoid setState errors during dispose
+    _calibrationTimer?.cancel();
+    _calibrationTimer = null;
+    _loopActive = false;
+    _isSweeping = false;
+    _isProcessing = false;
+    
+    _accelSub?.cancel();
+    _accelSub = null;
+    _gyroSub?.cancel();
+    _gyroSub = null;
+    _gpsBadgeSub?.cancel();
+    _gpsBadgeSub = null;
+    _gpsSub?.cancel();
+    _gpsSub = null;
+    _geoService.stopStream();
+    
     _cameraController?.dispose();
     _cameraController = null;
     _overlayVisualTimer?.cancel();
     _overlayVibrationTimer?.cancel();
-    _calibrationTimer?.cancel();
-    _calibrationTimer = null;
     super.dispose();
   }
 
@@ -376,12 +391,19 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
     _calibrationTimer?.cancel();
     _calibrationTimer = null;
 
-    setState(() {
+    if (mounted) {
+      setState(() {
+        _isSweeping = false;
+        _loopActive = false;
+        _isProcessing = true;
+        _processingStep = 0;
+      });
+    } else {
       _isSweeping = false;
       _loopActive = false;
       _isProcessing = true;
       _processingStep = 0;
-    });
+    }
 
     _accelSub?.cancel();
     _accelSub = null;
@@ -479,25 +501,6 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
       } catch (_) {}
     }
     _rollingFrameQueue.clear();
-  }
-
-  Future<void> _updateCoordinates() async {
-    try {
-      final pos = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 2),
-        ),
-      );
-      if (mounted) {
-        setState(() {
-          _latitude = pos.latitude;
-          _longitude = pos.longitude;
-          _gpsAccuracy = pos.accuracy;
-          _speed = pos.speed;
-        });
-      }
-    } catch (_) {}
   }
 
   void _correlateVisualAndVibration(int vibTimeMs, double vibScore) {
@@ -768,179 +771,7 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
     }
   }
 
-  void _showSummaryReport() {
-    final elapsed = _sweepStartTime != null
-        ? DateTime.now().difference(_sweepStartTime!).inSeconds
-        : 0;
-    final mm = (elapsed ~/ 60).toString().padLeft(2, '0');
-    final ss = (elapsed % 60).toString().padLeft(2, '0');
 
-    final quality = _sensorService.calculateQuality(
-      gpsAccuracyMeters: _gpsAccuracy,
-      actualSampleRateHz: _actualSamplingRate,
-      requestSampleRateHz: 50.0,
-      mountType: _selectedMount,
-    );
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFF1E293B),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) => DraggableScrollableSheet(
-        initialChildSize: 0.8,
-        minChildSize: 0.5,
-        maxChildSize: 0.95,
-        expand: false,
-        builder: (context, scrollController) => Column(
-          children: [
-            Container(
-              margin: const EdgeInsets.only(top: 12),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(
-                color: const Color(0xFF475569),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'ROAD SCAN COMPLETE',
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: Colors.white,
-                letterSpacing: 1.5,
-              ),
-            ),
-            const SizedBox(height: 20),
-            Expanded(
-              child: ListView(
-                controller: scrollController,
-                padding: const EdgeInsets.all(20),
-                children: [
-                  // Stat Grid
-                  GridView.count(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: 1.6,
-                    children: [
-                      _SummaryStatCard(label: 'Duration', value: '$mm:$ss', icon: Icons.timer_rounded, color: const Color(0xFF38BDF8)),
-                      _SummaryStatCard(label: 'Sensor Quality', value: '${(quality.overallQuality * 100).toStringAsFixed(0)}%', icon: Icons.verified_user_rounded, color: const Color(0xFF34D399)),
-                      _SummaryStatCard(label: 'Visual Frames', value: '$_captureCount', icon: Icons.camera_alt_rounded, color: const Color(0xFFF472B6)),
-                      _SummaryStatCard(label: 'Vibrations', value: '$_vibrationEventCount', icon: Icons.sensors_rounded, color: const Color(0xFFFBBF24)),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-
-                  // Fused correlated count banner
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF4F46E5).withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFF4F46E5).withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.link_rounded, color: Color(0xFF818CF8), size: 24),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                '${_correlatedEvents.length} Correlated Events',
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                              ),
-                              const SizedBox(height: 2),
-                              const Text(
-                                'Aligned visual defects with physical dynamic impacts into single drafts.',
-                                style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-                  const Text(
-                    'DETECTED ROAD EVENTS',
-                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B), letterSpacing: 1.0),
-                  ),
-                  const SizedBox(height: 12),
-
-                  if (_correlatedEvents.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 40),
-                      child: Center(
-                        child: Text(
-                          'No correlated impact events detected.',
-                          style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
-                        ),
-                      ),
-                    )
-                  else
-                    ..._correlatedEvents.map((e) => Card(
-                          color: const Color(0xFF0F172A).withValues(alpha: 0.4),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          child: ListTile(
-                            leading: Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFEF4444).withValues(alpha: 0.1),
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFF87171), size: 20),
-                            ),
-                            title: Text(
-                              '${e.visualClass?.toUpperCase() ?? "POTHOLE"} CANDIDATE',
-                              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
-                            ),
-                            subtitle: Text(
-                              'Location: ${e.latitude.toStringAsFixed(4)}, ${e.longitude.toStringAsFixed(4)} • Speed: ${(e.speedMps * 3.6).toStringAsFixed(0)} km/h',
-                              style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
-                            ),
-                            trailing: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  '${(e.fusedEvidenceScore * 100).toStringAsFixed(0)}%',
-                                  style: const TextStyle(color: Color(0xFF34D399), fontWeight: FontWeight.bold, fontSize: 14),
-                                ),
-                                const Text('Evidence', style: TextStyle(color: Color(0xFF64748B), fontSize: 9)),
-                              ],
-                            ),
-                          ),
-                        )),
-
-                  const SizedBox(height: 32),
-                  ElevatedButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF4F46E5),
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
-                    child: const Text('View Draft Queue', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {

@@ -310,7 +310,16 @@ class _CameraPageState extends ConsumerState<CameraPage>
                         label: 'Sweep',
                         icon: Icons.directions_walk_rounded,
                         isSelected: false,
-                        onTap: () => context.pushReplacement('/capture/sweep'),
+                        onTap: () async {
+                          final c = _controller;
+                          _controller = null;
+                          if (c != null) {
+                            await c.dispose();
+                          }
+                          if (context.mounted) {
+                            context.pushReplacement('/capture/sweep');
+                          }
+                        },
                       ),
                       if (FeatureFlags.bridgeCheck)
                         _CameraModePill(
@@ -403,7 +412,16 @@ class _CameraPageState extends ConsumerState<CameraPage>
                   label: 'Sweep',
                   icon: Icons.directions_walk_rounded,
                   isSelected: false,
-                  onTap: () => context.pushReplacement('/capture/sweep'),
+                  onTap: () async {
+                    final c = _controller;
+                    _controller = null;
+                    if (c != null) {
+                      await c.dispose();
+                    }
+                    if (context.mounted) {
+                      context.pushReplacement('/capture/sweep');
+                    }
+                  },
                 ),
               ],
             ),
