@@ -12,7 +12,9 @@ import 'package:geolocator/geolocator.dart';
 import '../../../core/geo/geo_capture_service.dart';
 import '../../../core/permissions/permission_service.dart';
 import '../../../shared/report_payload.dart';
+import '../../../shared/contractor.dart';
 import '../../../core/sensor/sensor_processing_service.dart';
+import '../../../core/network/api_providers.dart';
 import '../../report/data/draft_queue_repository.dart';
 import '../../auth/application/auth_controller.dart';
 
@@ -82,7 +84,7 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
   bool _isProcessing = false;
   int _processingStep = 0;
   bool _showSummary = false;
-  List<dynamic> _suggestedContractors = [];
+  List<ContractorSummary> _suggestedContractors = [];
 
   String? _overlayVisualText;
   String? _overlayVibrationText;
