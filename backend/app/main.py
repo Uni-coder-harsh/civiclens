@@ -102,6 +102,13 @@ app.include_router(analytics_router, prefix=api_prefix)
 app.include_router(integration_router)
 app.include_router(reports_router, prefix=api_prefix)
 
+# Mount local static file storage for fallback image serving
+import os
+from fastapi.staticfiles import StaticFiles
+storage_dir = os.environ.get("LOCAL_STORAGE_DIR", "/tmp/civiclens_uploads")
+os.makedirs(storage_dir, exist_ok=True)
+app.mount("/static/uploads", StaticFiles(directory=storage_dir), name="static_uploads")
+
 @app.get("/", include_in_schema=False)
 async def root_redirect():
     return RedirectResponse(url="/docs")
