@@ -86,8 +86,8 @@ class SyncController extends AsyncNotifier<SyncSummaryState> {
   /// Resets a specific draft from `failed` → `pending` and initiates upload.
   Future<void> retryDraft(String draftId) async {
     final dao = _buildDao();
-    // Reset state to pending so it is picked up by the next sync
-    await dao.markUploading(draftId);
+    // Reset to pending state for retry
+    await dao.markPending(draftId);
     _retryAttempts.remove(draftId);
     _backoffTimers[draftId]?.cancel();
     _backoffTimers.remove(draftId);
@@ -115,6 +115,9 @@ class SyncController extends AsyncNotifier<SyncSummaryState> {
     final repo = ref.read(draftQueueRepositoryProvider);
     final drafts = await repo.getPendingDrafts();
 
+    // Initialize pending count based on fetched drafts
+    _updateState(pendingCount: drafts.length);
+
     if (drafts.isEmpty) {
       _isSyncing = false;
       _updateState(isSyncing: false, pendingCount: 0);
@@ -131,7 +134,8 @@ class SyncController extends AsyncNotifier<SyncSummaryState> {
     }
 
     _isSyncing = false;
-    _updateState(isSyncing: false);
+  // All drafts processed; clear counts
+  _updateState(isSyncing: false, pendingCount: 0, uploadingCount: 0);
   }
 
   Future<void> _uploadDraft(String draftId) async {
@@ -153,20 +157,27 @@ class SyncController extends AsyncNotifier<SyncSummaryState> {
       return;
     }
 
-    // Mark as uploading and increment uploading count
+    // Transition from pending to uploading: adjust counts
     await dao.markUploading(draftId);
-    _updateState(uploadingCount: (state.valueOrNull?.uploadingCount ?? 0) + 1);
-
+    _updateState(
+      pendingCount: (state.valueOrNull?.pendingCount ?? 0) - 1,
+      uploadingCount: (state.valueOrNull?.uploadingCount ?? 0) + 1,
+    );
     try {
       final response = await api.uploadInfrastructureReport(draft!);
       await dao.markSynced(draftId, response.reportId);
       _retryAttempts.remove(draftId);
       // Decrement uploading count after success
-      _updateState(uploadingCount: (state.valueOrNull?.uploadingCount ?? 1) - 1);
-    } catch (e) {
-      // Decrement uploading count on failure
-      _updateState(uploadingCount: (state.valueOrNull?.uploadingCount ?? 1) - 1);
-      final attempt = (_retryAttempts[draftId] ?? 0) + 1;
+      _updateState(
+        uploadingCount: (state.valueOrNull?.uploadingCount ?? 1) - 1,
+        // pendingCount already decremented when upload started
+      );    } catch (e) {
+      // Decrement uploading count on failure and increment failed count
+      _updateState(
+        uploadingCount: (state.valueOrNull?.uploadingCount ?? 1) - 1,
+        failedCount: (state.valueOrNull?.failedCount ?? 0) + 1,
+        lastError: e.toString(),
+      );      final attempt = (_retryAttempts[draftId] ?? 0) + 1;
       _retryAttempts[draftId] = attempt;
       await dao.incrementRetry(draftId);
       await dao.markFailed(draftId, e.toString());

@@ -37,11 +37,16 @@ class DraftQueueDao {
     return _db.into(_db.reportDrafts).insertOnConflictUpdate(companion);
   }
 
+  /// Updates [syncState] to `pending`.
+  Future<int> markPending(String id) {
+    return (_db.update(_db.reportDrafts)..where((t) => t.id.equals(id)))
+        .write(const ReportDraftsCompanion(syncState: Value('pending')));
+  }
+
   /// Updates [syncState] to `uploading`.
   Future<int> markUploading(String id) {
-    return (_db.update(_db.reportDrafts)..where((t) => t.id.equals(id))).write(
-      const ReportDraftsCompanion(syncState: Value('uploading')),
-    );
+    return (_db.update(_db.reportDrafts)..where((t) => t.id.equals(id)))
+        .write(const ReportDraftsCompanion(syncState: Value('uploading')));
   }
 
   /// Updates [syncState] to `synced` and records [syncedAtUtc].
