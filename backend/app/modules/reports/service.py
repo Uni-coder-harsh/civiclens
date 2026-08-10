@@ -68,8 +68,8 @@ class ReportsService:
     async def _upload_image(self, image: UploadFile, report_id: str) -> str | None:
         """
         Uploads image directly to Supabase Storage.
+        Automatically creates the storage bucket if it does not exist.
         Returns the authentic public URL if upload succeeds, or None if it fails.
-        No dummy or temporary URLs are generated.
         """
         content = await image.read()
         if not content:
@@ -99,6 +99,10 @@ class ReportsService:
             ext = (image.filename or "img.jpg").rsplit(".", 1)[-1].lower() or "jpg"
             path = f"reports/{report_id}/{uuid.uuid4()}.{ext}"
 
+            # ── Automatic Bucket Creation / Ensure Bucket Exists ─────────────
+            self._ensure_bucket_exists(client, bucket)
+
+            # ── Upload File to Bucket ─────────────────────────────────────────
             client.storage.from_(bucket).upload(
                 path=path,
                 file=content,
@@ -112,11 +116,44 @@ class ReportsService:
             )
             return public_url
         except Exception as e:
+            # If upload failed due to bucket missing on first try, attempt explicit bucket creation and retry
+            if "Bucket not found" in str(e) or "404" in str(e):
+                try:
+                    logger.info(f"[Reports] 📦 Attempting bucket creation retry for '{bucket}'...")
+                    client.storage.create_bucket(bucket, options={"public": True})
+                    client.storage.from_(bucket).upload(
+                        path=path,
+                        file=content,
+                        file_options={"content-type": image.content_type or "image/jpeg"},
+                    )
+                    public_url = client.storage.from_(bucket).get_public_url(path)
+                    logger.info(
+                        f"[Reports] ☁️ Image uploaded to Supabase Storage after auto bucket creation | "
+                        f"report_id={report_id} url={public_url}"
+                    )
+                    return public_url
+                except Exception as retry_err:
+                    logger.error(
+                        f"[Reports] ❌ Retry bucket creation and upload failed | "
+                        f"report_id={report_id} error={retry_err}"
+                    )
+                    return None
+
             logger.error(
                 f"[Reports] ❌ Supabase cloud storage upload failed | "
                 f"report_id={report_id} url={supabase_url} error={e}"
             )
             return None
+
+    @staticmethod
+    def _ensure_bucket_exists(client, bucket_name: str) -> None:
+        """Attempts to create the public Supabase storage bucket if it does not already exist."""
+        try:
+            client.storage.create_bucket(bucket_name, options={"public": True})
+            logger.info(f"[Reports] 📦 Automatically created public Supabase bucket '{bucket_name}'")
+        except Exception:
+            # Bucket already exists or user doesn't have create_bucket perms (will handle in upload)
+            pass
 
     @staticmethod
     def _to_response(report: CivicReport) -> ReportResponse:
