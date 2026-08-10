@@ -45,12 +45,12 @@ class ReportsService:
         image_url = await self._upload_image(image, data.id)
         if not image_url:
             logger.error(
-                f"[Reports] ❌ Storage upload failed for client_id={data.id}. "
-                "Rejecting report creation so client marks report as failed."
+                f"[Reports] ❌ Supabase cloud image upload failed for client_id={data.id}. "
+                "Rejecting report creation so DB receives only valid cloud image URLs."
             )
             raise HTTPException(
                 status_code=500,
-                detail="Image upload to storage failed. Report submission rejected."
+                detail="Cloud image storage upload failed. Report submission rejected."
             )
 
         # ── Persist report to DB ─────────────────────────────────────────────
@@ -67,72 +67,55 @@ class ReportsService:
 
     async def _upload_image(self, image: UploadFile, report_id: str) -> str | None:
         """
-        Upload image to Supabase S3-compatible storage.
-        If Supabase is unconfigured, unauthorized (e.g. invalid key), or unavailable,
-        falls back to saving the image to local server static storage.
+        Uploads image directly to Supabase Storage.
+        Returns the authentic public URL if upload succeeds, or None if it fails.
+        No dummy or temporary URLs are generated.
         """
         content = await image.read()
         if not content:
             logger.error(f"[Reports] ❌ Empty image file provided for report_id={report_id}")
             return None
 
-        # ── 1. Attempt Supabase Storage Upload ───────────────────────────────
         raw_url = os.environ.get("SUPABASE_URL", "").strip()
         supabase_key = os.environ.get("SUPABASE_SERVICE_KEY", "").strip()
 
-        if raw_url and supabase_key:
-            supabase_url = raw_url
-            if "/storage/v1" in supabase_url:
-                supabase_url = supabase_url.split("/storage/v1")[0]
-            supabase_url = supabase_url.replace("storage.supabase.co", "supabase.co").rstrip("/")
-
-            try:
-                from supabase import create_client  # type: ignore
-
-                client = create_client(supabase_url, supabase_key)
-                bucket = os.environ.get("SUPABASE_BUCKET", "civiclens_storage")
-                ext = (image.filename or "img.jpg").rsplit(".", 1)[-1].lower() or "jpg"
-                path = f"reports/{report_id}/{uuid.uuid4()}.{ext}"
-
-                client.storage.from_(bucket).upload(
-                    path=path,
-                    file=content,
-                    file_options={"content-type": image.content_type or "image/jpeg"},
-                )
-                public_url = client.storage.from_(bucket).get_public_url(path)
-                logger.info(
-                    f"[Reports] ☁️ Image uploaded to Supabase Storage | "
-                    f"report_id={report_id} bucket={bucket} path={path} "
-                    f"size={len(content)} bytes url={public_url}"
-                )
-                return public_url
-            except Exception as e:
-                logger.warning(
-                    f"[Reports] ⚠️ Supabase Storage upload failed ({e}). "
-                    "Falling back to local server static storage."
-                )
-
-        # ── 2. Local File System Fallback ────────────────────────────────────
-        try:
-            storage_dir = os.environ.get("LOCAL_STORAGE_DIR", "/tmp/civiclens_uploads")
-            os.makedirs(storage_dir, exist_ok=True)
-
-            ext = (image.filename or "img.jpg").rsplit(".", 1)[-1].lower() or "jpg"
-            filename = f"report_{report_id}_{uuid.uuid4().hex[:8]}.{ext}"
-            file_path = os.path.join(storage_dir, filename)
-
-            with open(file_path, "wb") as f:
-                f.write(content)
-
-            base_url = os.environ.get("PUBLIC_API_URL", "").rstrip("/")
-            local_url = f"{base_url}/static/uploads/{filename}" if base_url else f"/static/uploads/{filename}"
-            logger.info(
-                f"[Reports] 📁 Image saved to local server static storage | "
-                f"report_id={report_id} path={file_path} url={local_url}"
+        if not raw_url or not supabase_key:
+            logger.error(
+                "[Reports] ❌ SUPABASE_URL or SUPABASE_SERVICE_KEY environment variables are missing."
             )
-            return local_url
+            return None
+
+        # Sanitize SUPABASE_URL if set to S3 endpoint or storage URL
+        supabase_url = raw_url
+        if "/storage/v1" in supabase_url:
+            supabase_url = supabase_url.split("/storage/v1")[0]
+        supabase_url = supabase_url.replace("storage.supabase.co", "supabase.co").rstrip("/")
+
+        try:
+            from supabase import create_client  # type: ignore
+
+            client = create_client(supabase_url, supabase_key)
+            bucket = os.environ.get("SUPABASE_BUCKET", "civiclens_storage")
+            ext = (image.filename or "img.jpg").rsplit(".", 1)[-1].lower() or "jpg"
+            path = f"reports/{report_id}/{uuid.uuid4()}.{ext}"
+
+            client.storage.from_(bucket).upload(
+                path=path,
+                file=content,
+                file_options={"content-type": image.content_type or "image/jpeg"},
+            )
+            public_url = client.storage.from_(bucket).get_public_url(path)
+            logger.info(
+                f"[Reports] ☁️ Image uploaded to Supabase Storage | "
+                f"report_id={report_id} bucket={bucket} path={path} "
+                f"size={len(content)} bytes url={public_url}"
+            )
+            return public_url
         except Exception as e:
-            logger.error(f"[Reports] ❌ Local storage fallback also failed: {e}")
+            logger.error(
+                f"[Reports] ❌ Supabase cloud storage upload failed | "
+                f"report_id={report_id} url={supabase_url} error={e}"
+            )
             return None
 
     @staticmethod
