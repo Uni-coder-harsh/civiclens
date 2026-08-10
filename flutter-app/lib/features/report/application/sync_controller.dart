@@ -141,10 +141,13 @@ class SyncController extends AsyncNotifier<SyncSummaryState> {
 
     // Fetch the specific draft directly
     final pendingDrafts = await repo.getPendingDrafts();
-    final draft = pendingDrafts.firstWhere(
-      (d) => d.id == draftId,
-      orElse: () => null,
-    );
+    ReportPayload? draft;
+    for (final d in pendingDrafts) {
+      if (d.id == draftId) {
+        draft = d;
+        break;
+      }
+    }
     if (draft == null) {
       // No such draft; nothing to upload
       return;
@@ -155,7 +158,7 @@ class SyncController extends AsyncNotifier<SyncSummaryState> {
     _updateState(uploadingCount: (state.valueOrNull?.uploadingCount ?? 0) + 1);
 
     try {
-      final response = await api.uploadInfrastructureReport(draft);
+      final response = await api.uploadInfrastructureReport(draft!);
       await dao.markSynced(draftId, response.reportId);
       _retryAttempts.remove(draftId);
       // Decrement uploading count after success
