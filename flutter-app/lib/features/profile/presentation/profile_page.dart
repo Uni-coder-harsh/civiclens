@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:path_provider/path_provider.dart';
 import '../../../core/auth/auth_session.dart';
 import '../../../features/auth/application/auth_controller.dart';
 import '../../../shared/ticket.dart';
@@ -392,40 +395,90 @@ class _EditProfileDialogState extends ConsumerState<_EditProfileDialog> {
   }
 
   Future<void> _pickAndUploadAvatar() async {
+    final ImageSource? source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: const Color(0xFF1E293B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.camera_alt_rounded, color: Colors.white),
+              title: const Text('Take Photo', style: TextStyle(color: Colors.white)),
+              onTap: () => Navigator.pop(context, ImageSource.camera),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded, color: Colors.white),
+              title: const Text('Choose from Gallery', style: TextStyle(color: Colors.white)),
+              onTap: () => Navigator.pop(context, ImageSource.gallery),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (source == null) return;
+
     setState(() {
       _isLoading = true;
       _uploadError = null;
     });
 
     try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
-        allowMultiple: false,
+      final picker = ImagePicker();
+      final XFile? file = await picker.pickImage(
+        source: source,
+        imageQuality: 100,
       );
 
-      if (result == null || result.files.single.path == null) {
+      if (file == null) {
         setState(() => _isLoading = false);
         return;
       }
 
-      final path = result.files.single.path!;
-      final file = File(path);
-
-      // File type validation
+      final path = file.path;
       final extension = path.split('.').last.toLowerCase();
       final allowed = ['jpg', 'jpeg', 'png', 'webp'];
       if (!allowed.contains(extension)) {
         throw Exception("Only JPG, PNG, and WEBP files are allowed.");
       }
 
-      // File size validation (5MB max)
-      final size = await file.length();
-      if (size > 5 * 1024 * 1024) {
-        throw Exception("File size exceeds 5MB limit.");
+      final originalFile = File(path);
+      final size = await originalFile.length();
+      if (size > 10 * 1024 * 1024) {
+        throw Exception("Original file size exceeds 10MB limit.");
+      }
+
+      // Optimize/compress image before uploading
+      final tempDir = await getTemporaryDirectory();
+      final targetPath = '${tempDir.path}/compressed_avatar_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      
+      String uploadPath = path;
+      try {
+        final compressedFile = await FlutterImageCompress.compressAndGetFile(
+          path,
+          targetPath,
+          quality: 80,
+          minWidth: 800,
+          minHeight: 800,
+          format: CompressFormat.jpeg,
+        );
+        if (compressedFile != null) {
+          uploadPath = compressedFile.path;
+          final optimizedSize = await File(uploadPath).length();
+          if (optimizedSize > 5 * 1024 * 1024) {
+            throw Exception("Optimized file size exceeds 5MB limit.");
+          }
+        }
+      } catch (compressErr) {
+        debugPrint("Local compression failed: $compressErr");
       }
 
       // Upload file directly to Supabase S3
-      final url = await ref.read(authControllerProvider.notifier).uploadAvatar(path);
+      final url = await ref.read(authControllerProvider.notifier).uploadAvatar(uploadPath);
       setState(() {
         _avatarUrl = url;
         _isLoading = false;
