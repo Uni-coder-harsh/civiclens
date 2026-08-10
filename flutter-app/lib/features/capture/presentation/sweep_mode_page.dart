@@ -6,21 +6,20 @@ import 'dart:math';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:uuid/uuid.dart';
 
-import 'package:geolocator/geolocator.dart';
-
 import '../../../core/geo/geo_capture_service.dart';
-import '../../../core/permissions/permission_service.dart';
-import '../../../shared/report_payload.dart';
-import '../../../shared/contractor.dart';
-import '../../../core/sensor/sensor_processing_service.dart';
 import '../../../core/network/api_providers.dart';
-import '../../report/data/draft_queue_repository.dart';
-import '../../report/application/sync_controller.dart';
+import '../../../core/permissions/permission_service.dart';
+import '../../../core/sensor/sensor_processing_service.dart';
+import '../../../shared/contractor.dart';
+import '../../../shared/report_payload.dart';
 import '../../auth/application/auth_controller.dart';
+import '../../report/application/sync_controller.dart';
+import '../../report/data/draft_queue_repository.dart';
 
 /// Sweep Mode / Mobile Road Scan Page
 ///
@@ -143,13 +142,13 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
       _calibrationVibrationEvents.clear();
       _rollingFrameQueue.clear();
     });
-    
+
     _calibrationTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted || !_isSweeping) {
         timer.cancel();
         return;
       }
-      
+
       setState(() {
         if (_calibrationTimeRemaining > 1) {
           _calibrationTimeRemaining--;
@@ -170,11 +169,13 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
     } else {
       _calibratedDistance = 1.5; // Default fallback distance (meters)
     }
-    _addLog('Calibration locked: Calculated effective camera-to-wheel distance = ${_calibratedDistance.toStringAsFixed(1)}m');
+    _addLog(
+        'Calibration locked: Calculated effective camera-to-wheel distance = ${_calibratedDistance.toStringAsFixed(1)}m');
   }
 
   void _addLog(String msg) {
-    final time = DateTime.now().toLocal().toString().split(' ').last.substring(0, 8);
+    final time =
+        DateTime.now().toLocal().toString().split(' ').last.substring(0, 8);
     if (mounted) {
       setState(() {
         _consoleLogs.add('[$time] $msg');
@@ -196,14 +197,14 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    
+
     // Stop all streams and timers directly to avoid setState errors during dispose
     _calibrationTimer?.cancel();
     _calibrationTimer = null;
     _loopActive = false;
     _isSweeping = false;
     _isProcessing = false;
-    
+
     _accelSub?.cancel();
     _accelSub = null;
     _gyroSub?.cancel();
@@ -213,7 +214,7 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
     _gpsSub?.cancel();
     _gpsSub = null;
     _geoService.stopStream();
-    
+
     _cameraController?.dispose();
     _cameraController = null;
     _overlayVisualTimer?.cancel();
@@ -254,8 +255,13 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
       _cameras = await availableCameras();
       if (_cameras.isEmpty) throw Exception('No cameras available');
 
+      final backCamera = _cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.back,
+        orElse: () => _cameras.first,
+      );
+
       _cameraController = CameraController(
-        _cameras.first,
+        backCamera,
         ResolutionPreset.high,
         enableAudio: false,
       );
@@ -279,7 +285,8 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
   }
 
   void _startSweep() {
-    if (_cameraController == null || !_cameraController!.value.isInitialized) return;
+    if (_cameraController == null || !_cameraController!.value.isInitialized)
+      return;
 
     _sensorService.resetBaseline();
     _verticalAccelBuffer.clear();
@@ -296,7 +303,8 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
       _loopActive = true;
     });
 
-    _addLog('Scanning started (Vehicle: $_selectedVehicle, Mount: $_selectedMount)');
+    _addLog(
+        'Scanning started (Vehicle: $_selectedVehicle, Mount: $_selectedMount)');
     _startCalibrationTimer();
 
     // Start GPS stream
@@ -329,7 +337,8 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
       samplingPeriod: SensorInterval.normalInterval,
     ).listen((event) {
       accelSampleCount++;
-      final zDyn = _sensorService.getVerticalDynamicAcceleration(event.x, event.y, event.z);
+      final zDyn = _sensorService.getVerticalDynamicAcceleration(
+          event.x, event.y, event.z);
       _verticalAccelBuffer.add(zDyn);
       if (_verticalAccelBuffer.length > 50) {
         _verticalAccelBuffer.removeAt(0);
@@ -345,17 +354,21 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
 
       // Perform sliding window math
       if (_verticalAccelBuffer.length >= 10) {
-        final rms = sqrt(_verticalAccelBuffer.map((v) => v * v).reduce((a, b) => a + b) / _verticalAccelBuffer.length);
+        final rms = sqrt(
+            _verticalAccelBuffer.map((v) => v * v).reduce((a, b) => a + b) /
+                _verticalAccelBuffer.length);
         final peak = _verticalAccelBuffer.map((v) => v.abs()).reduce(max);
         final jerk = (zDyn - _lastZDyn) / 0.02; // Assumed ~50Hz dt
         _lastZDyn = zDyn;
 
         _sensorService.updateBaselineStats(rms, peak, jerk);
-        final vibrationScore = _sensorService.getZScoreVibration(rms, peak, jerk);
+        final vibrationScore =
+            _sensorService.getZScoreVibration(rms, peak, jerk);
 
         if (vibrationScore > _sensorService.thresholdVibration) {
           final nowMs = DateTime.now().millisecondsSinceEpoch;
-          if (nowMs - _lastVibrationEventTimeMs > 2000) { // Debounce 2 seconds
+          if (nowMs - _lastVibrationEventTimeMs > 2000) {
+            // Debounce 2 seconds
             _lastVibrationEventTimeMs = nowMs;
             _vibrationEventCount++;
             _detectedVibrations.add({
@@ -366,8 +379,10 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
               'jerk': jerk,
             });
 
-            _addLog('IMU: Road dynamic impact detected (Score: ${vibrationScore.toStringAsFixed(2)})');
-            _showVibrationOverlay('IMU: Dynamic road shock detected (Score: ${vibrationScore.toStringAsFixed(2)})');
+            _addLog(
+                'IMU: Road dynamic impact detected (Score: ${vibrationScore.toStringAsFixed(2)})');
+            _showVibrationOverlay(
+                'IMU: Dynamic road shock detected (Score: ${vibrationScore.toStringAsFixed(2)})');
 
             // Correlate with last visual detection
             _correlateVisualAndVibration(nowMs, vibrationScore);
@@ -512,12 +527,14 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
           .toList();
       if (closestVisuals.isNotEmpty) {
         final lastVis = closestVisuals.last;
-        final delaySec = (vibTimeMs - (lastVis['timestamp_ms'] as int)) / 1000.0;
+        final delaySec =
+            (vibTimeMs - (lastVis['timestamp_ms'] as int)) / 1000.0;
         if (delaySec > 0 && delaySec < 6.0) {
           final currentSpeed = max(_speed, 1.5);
           final distance = delaySec * currentSpeed;
           _detectedDistances.add(distance);
-          _addLog('Calibration event: Speed = ${currentSpeed.toStringAsFixed(1)} m/s, Delay = ${delaySec.toStringAsFixed(1)}s, Distance = ${distance.toStringAsFixed(1)}m');
+          _addLog(
+              'Calibration event: Speed = ${currentSpeed.toStringAsFixed(1)} m/s, Delay = ${delaySec.toStringAsFixed(1)}s, Distance = ${distance.toStringAsFixed(1)}m');
         }
       }
 
@@ -552,7 +569,8 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
         setState(() {
           _correlatedEvents.add(mme);
         });
-        _addLog('Link: Aligned vibration with $visualClass (Confidence: ${(mme.fusedEvidenceScore * 100).toStringAsFixed(0)}%)');
+        _addLog(
+            'Link: Aligned vibration with $visualClass (Confidence: ${(mme.fusedEvidenceScore * 100).toStringAsFixed(0)}%)');
         _saveMultimodalDraft(mme);
       }
     } else {
@@ -561,14 +579,15 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
       final currentSpeed = max(_speed, 1.5);
       final dynamicDelaySec = _calibratedDistance / currentSpeed;
       final targetTimeMs = vibTimeMs - (dynamicDelaySec * 1000).toInt();
-      
+
       // Dynamic search window tolerance proportional to speed/delay
-      final searchToleranceMs = (dynamicDelaySec * 0.5 * 1000).clamp(500.0, 2000.0).toInt();
+      final searchToleranceMs =
+          (dynamicDelaySec * 0.5 * 1000).clamp(500.0, 2000.0).toInt();
 
       // Find the closest frame in the rolling queue
       Map<String, dynamic>? matchingFrame;
       int minDiff = 999999;
-      
+
       for (final frame in _rollingFrameQueue) {
         final diff = ((frame['timestamp_ms'] as int) - targetTimeMs).abs();
         if (diff < minDiff) {
@@ -576,15 +595,15 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
           matchingFrame = frame;
         }
       }
-      
+
       if (matchingFrame != null && minDiff < searchToleranceMs) {
         final bool frameHasDefect = matchingFrame['has_defect'] as bool;
-        
+
         if (frameHasDefect) {
           final String defectType = matchingFrame['defect_class'] as String;
           final double conf = matchingFrame['confidence'] as double;
           final String imgPath = matchingFrame['path'] as String;
-          
+
           final quality = _sensorService.calculateQuality(
             gpsAccuracyMeters: _gpsAccuracy,
             actualSampleRateHz: _actualSamplingRate,
@@ -604,12 +623,13 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
             visualClass: defectType,
             imagePath: imgPath,
           );
-          
+
           if (mme != null) {
             setState(() {
               _correlatedEvents.add(mme);
             });
-            _addLog('Link: Aligned vibration with $defectType (Adaptive Queue matched at speed ${currentSpeed.toStringAsFixed(1)} m/s)');
+            _addLog(
+                'Link: Aligned vibration with $defectType (Adaptive Queue matched at speed ${currentSpeed.toStringAsFixed(1)} m/s)');
             _saveMultimodalDraft(mme);
           }
         }
@@ -619,7 +639,7 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
 
   Future<void> _saveMultimodalDraft(MultimodalRoadEvent mme) async {
     final session = ref.read(authSessionProvider);
-    
+
     // Construct rich JSON representation of raw sensors and visual analytics
     final Map<String, dynamic> sensorTelemetry = {
       'device_sensor_rate_hz': _actualSamplingRate,
@@ -634,7 +654,8 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
       'camera': {
         'defect_class': mme.visualClass,
         'ai_confidence': mme.cameraConfidence,
-        'visual_timestamp_ms': mme.timestampMs - (_calibratedDistance / max(_speed, 1.5) * 1000).toInt(),
+        'visual_timestamp_ms': mme.timestampMs -
+            (_calibratedDistance / max(_speed, 1.5) * 1000).toInt(),
       },
       'location': {
         'latitude': mme.latitude,
@@ -653,8 +674,11 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
           : ReportCategory.roadCrack,
       severity: mme.fusedEvidenceScore > 0.8
           ? ReportSeverity.critical
-          : (mme.fusedEvidenceScore > 0.6 ? ReportSeverity.high : ReportSeverity.medium),
-      description: 'Multimodal Road Scan: Fused Evidence ${(mme.fusedEvidenceScore * 100).toStringAsFixed(0)}% (Auto-Correlated)',
+          : (mme.fusedEvidenceScore > 0.6
+              ? ReportSeverity.high
+              : ReportSeverity.medium),
+      description:
+          'Multimodal Road Scan: Fused Evidence ${(mme.fusedEvidenceScore * 100).toStringAsFixed(0)}% (Auto-Correlated)',
       capture: GeoCapture(
         latitude: mme.latitude,
         longitude: mme.longitude,
@@ -674,7 +698,7 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
       final repo = ref.read(draftQueueRepositoryProvider);
       await repo.saveDraft(payload);
       _addLog('Draft: Linked event saved to local SQLite draft queue');
-      
+
       // Auto-trigger sync to update database and S3 immediately
       ref.read(syncControllerProvider.notifier).syncAll();
     } catch (e) {
@@ -703,9 +727,13 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
       final nowMs = DateTime.now().millisecondsSinceEpoch;
 
       // Mock visual AI checks
-      final hasVisualDefect = Random().nextDouble() > 0.6; // 40% chance of visual defect
-      final confidence = hasVisualDefect ? 0.7 + Random().nextDouble() * 0.25 : 0.0;
-      final defectClass = hasVisualDefect ? (Random().nextBool() ? 'pothole' : 'crack') : 'none';
+      final hasVisualDefect =
+          Random().nextDouble() > 0.6; // 40% chance of visual defect
+      final confidence =
+          hasVisualDefect ? 0.7 + Random().nextDouble() * 0.25 : 0.0;
+      final defectClass = hasVisualDefect
+          ? (Random().nextBool() ? 'pothole' : 'crack')
+          : 'none';
 
       final frameData = {
         'path': xFile.path,
@@ -720,8 +748,9 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
         if (hasVisualDefect) {
           _lastVisualEvent = frameData;
           _calibrationVisualEvents.add(frameData);
-          _showVisualOverlay('AI: ${defectClass.toUpperCase()} detected (Conf: ${(confidence * 100).toStringAsFixed(0)}%)');
-          
+          _showVisualOverlay(
+              'AI: ${defectClass.toUpperCase()} detected (Conf: ${(confidence * 100).toStringAsFixed(0)}%)');
+
           // During calibration phase, save visual defects directly as baseline
           final mme = MultimodalRoadEvent(
             id: const Uuid().v4(),
@@ -743,14 +772,16 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
         _rollingFrameQueue.add(frameData);
 
         if (hasVisualDefect) {
-          _showVisualOverlay('AI: ${defectClass.toUpperCase()} detected (Queueing)');
+          _showVisualOverlay(
+              'AI: ${defectClass.toUpperCase()} detected (Queueing)');
         }
 
         // Keep rolling cache limited to dynamic velocity-based delay + 2 seconds and delete older files
         final dynamicDelaySec = _calibratedDistance / max(_speed, 1.5);
         final limitMs = (dynamicDelaySec + 2.0) * 1000.0;
         while (_rollingFrameQueue.isNotEmpty &&
-               (nowMs - (_rollingFrameQueue.first['timestamp_ms'] as int)) > limitMs) {
+            (nowMs - (_rollingFrameQueue.first['timestamp_ms'] as int)) >
+                limitMs) {
           final oldFrame = _rollingFrameQueue.removeAt(0);
           try {
             final file = File(oldFrame['path'] as String);
@@ -770,8 +801,6 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
       _addLog('Camera Error: Frame capture failed: $e');
     }
   }
-
-
 
   @override
   Widget build(BuildContext context) {
@@ -907,10 +936,27 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
             mainAxisSpacing: 12,
             childAspectRatio: 1.6,
             children: [
-              _SummaryStatCard(label: 'Duration', value: '$mm:$ss', icon: Icons.timer_rounded, color: const Color(0xFF38BDF8)),
-              _SummaryStatCard(label: 'Sensor Quality', value: '${(quality.overallQuality * 100).toStringAsFixed(0)}%', icon: Icons.verified_user_rounded, color: const Color(0xFF34D399)),
-              _SummaryStatCard(label: 'Visual Frames', value: '$_captureCount', icon: Icons.camera_alt_rounded, color: const Color(0xFFF472B6)),
-              _SummaryStatCard(label: 'Vibrations', value: '$_vibrationEventCount', icon: Icons.sensors_rounded, color: const Color(0xFFFBBF24)),
+              _SummaryStatCard(
+                  label: 'Duration',
+                  value: '$mm:$ss',
+                  icon: Icons.timer_rounded,
+                  color: const Color(0xFF38BDF8)),
+              _SummaryStatCard(
+                  label: 'Sensor Quality',
+                  value:
+                      '${(quality.overallQuality * 100).toStringAsFixed(0)}%',
+                  icon: Icons.verified_user_rounded,
+                  color: const Color(0xFF34D399)),
+              _SummaryStatCard(
+                  label: 'Visual Frames',
+                  value: '$_captureCount',
+                  icon: Icons.camera_alt_rounded,
+                  color: const Color(0xFFF472B6)),
+              _SummaryStatCard(
+                  label: 'Vibrations',
+                  value: '$_vibrationEventCount',
+                  icon: Icons.sensors_rounded,
+                  color: const Color(0xFFFBBF24)),
             ],
           ),
           const SizedBox(height: 24),
@@ -921,11 +967,13 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
             decoration: BoxDecoration(
               color: const Color(0xFF4F46E5).withValues(alpha: 0.15),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFF4F46E5).withValues(alpha: 0.3)),
+              border: Border.all(
+                  color: const Color(0xFF4F46E5).withValues(alpha: 0.3)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.link_rounded, color: Color(0xFF818CF8), size: 24),
+                const Icon(Icons.link_rounded,
+                    color: Color(0xFF818CF8), size: 24),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
@@ -933,12 +981,16 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                     children: [
                       Text(
                         '${_correlatedEvents.length} Correlated Events',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14),
                       ),
                       const SizedBox(height: 2),
                       const Text(
                         'Aligned visual defects with physical dynamic impacts into single drafts.',
-                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                        style:
+                            TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
                       ),
                     ],
                   ),
@@ -951,14 +1003,19 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
           // Suggested Contractor Portfolios
           const Text(
             'SUGGESTED REPAIR CONTRACTORS',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B), letterSpacing: 1.0),
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF64748B),
+                letterSpacing: 1.0),
           ),
           const SizedBox(height: 12),
           if (_suggestedContractors.isEmpty)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 20),
               child: Center(
-                child: Text('No contractor portfolios fetched.', style: TextStyle(color: Color(0xFF64748B), fontSize: 12)),
+                child: Text('No contractor portfolios fetched.',
+                    style: TextStyle(color: Color(0xFF64748B), fontSize: 12)),
               ),
             )
           else
@@ -971,7 +1028,8 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
 
               return Card(
                 color: const Color(0xFF1E293B),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
                 margin: const EdgeInsets.only(bottom: 12),
                 child: Padding(
                   padding: const EdgeInsets.all(14),
@@ -983,7 +1041,8 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                           color: const Color(0xFF3B82F6).withValues(alpha: 0.1),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.construction_rounded, color: Color(0xFF60A5FA), size: 22),
+                        child: const Icon(Icons.construction_rounded,
+                            color: Color(0xFF60A5FA), size: 22),
                       ),
                       const SizedBox(width: 14),
                       Expanded(
@@ -995,25 +1054,35 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                                 Expanded(
                                   child: Text(
                                     name,
-                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13),
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
                                 if (kyc)
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 2),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                                      color: const Color(0xFF10B981)
+                                          .withValues(alpha: 0.2),
                                       borderRadius: BorderRadius.circular(4),
                                     ),
-                                    child: const Text('KYC', style: TextStyle(color: Color(0xFF34D399), fontSize: 8, fontWeight: FontWeight.bold)),
+                                    child: const Text('KYC',
+                                        style: TextStyle(
+                                            color: Color(0xFF34D399),
+                                            fontSize: 8,
+                                            fontWeight: FontWeight.bold)),
                                   ),
                               ],
                             ),
                             const SizedBox(height: 4),
                             Text(
                               'Grade: ${grade.toStringAsFixed(1)}/10 • Completed: $completed • Active: $active',
-                              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                              style: const TextStyle(
+                                  color: Color(0xFF94A3B8), fontSize: 11),
                             ),
                           ],
                         ),
@@ -1027,7 +1096,11 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
           const SizedBox(height: 24),
           const Text(
             'DETECTED ROAD EVENTS',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B), letterSpacing: 1.0),
+            style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF64748B),
+                letterSpacing: 1.0),
           ),
           const SizedBox(height: 12),
 
@@ -1044,7 +1117,8 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
           else
             ..._correlatedEvents.map((e) => Card(
                   color: const Color(0xFF1E293B),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14)),
                   margin: const EdgeInsets.only(bottom: 10),
                   child: ListTile(
                     leading: Container(
@@ -1053,15 +1127,20 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                         color: const Color(0xFFEF4444).withValues(alpha: 0.1),
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFF87171), size: 20),
+                      child: const Icon(Icons.warning_amber_rounded,
+                          color: Color(0xFFF87171), size: 20),
                     ),
                     title: Text(
                       '${e.visualClass?.toUpperCase() ?? "POTHOLE"} CANDIDATE',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13),
                     ),
                     subtitle: Text(
                       'Location: ${e.latitude.toStringAsFixed(4)}, ${e.longitude.toStringAsFixed(4)} • Speed: ${(e.speedMps * 3.6).toStringAsFixed(0)} km/h',
-                      style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                      style: const TextStyle(
+                          color: Color(0xFF94A3B8), fontSize: 11),
                     ),
                     trailing: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -1069,9 +1148,14 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                       children: [
                         Text(
                           '${(e.fusedEvidenceScore * 100).toStringAsFixed(0)}%',
-                          style: const TextStyle(color: Color(0xFF34D399), fontWeight: FontWeight.bold, fontSize: 14),
+                          style: const TextStyle(
+                              color: Color(0xFF34D399),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14),
                         ),
-                        const Text('Evidence', style: TextStyle(color: Color(0xFF64748B), fontSize: 9)),
+                        const Text('Evidence',
+                            style: TextStyle(
+                                color: Color(0xFF64748B), fontSize: 9)),
                       ],
                     ),
                   ),
@@ -1088,9 +1172,12 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF4F46E5),
               padding: const EdgeInsets.symmetric(vertical: 16),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14)),
             ),
-            child: const Text('Return to Dashboard', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+            child: const Text('Return to Dashboard',
+                style: TextStyle(
+                    fontWeight: FontWeight.bold, color: Colors.white)),
           ),
         ],
       ),
@@ -1151,7 +1238,8 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
           const Center(
             child: Text(
               'Initialising camera preview...',
-              style: TextStyle(color: Colors.white70, fontFamily: 'Inter', fontSize: 13),
+              style: TextStyle(
+                  color: Colors.white70, fontFamily: 'Inter', fontSize: 13),
             ),
           ),
 
@@ -1179,7 +1267,11 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                 children: [
                   const Text(
                     'ROAD SCAN CONFIGURATION',
-                    style: TextStyle(color: Color(0xFF94A3B8), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.0),
+                    style: TextStyle(
+                        color: Color(0xFF94A3B8),
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.0),
                   ),
                   const SizedBox(height: 14),
                   Row(
@@ -1189,21 +1281,32 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                           isExpanded: true,
                           value: _selectedVehicle,
                           dropdownColor: const Color(0xFF1E293B),
-                          style: const TextStyle(color: Colors.white, fontSize: 13),
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 13),
                           decoration: InputDecoration(
                             labelText: 'Vehicle',
-                            labelStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                            enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF334155)), borderRadius: BorderRadius.circular(8)),
+                            labelStyle: const TextStyle(
+                                color: Color(0xFF64748B), fontSize: 11),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 8),
+                            enabledBorder: OutlineInputBorder(
+                                borderSide:
+                                    const BorderSide(color: Color(0xFF334155)),
+                                borderRadius: BorderRadius.circular(8)),
                           ),
                           items: const [
                             DropdownMenuItem(value: 'CAR', child: Text('Car')),
-                            DropdownMenuItem(value: 'BIKE', child: Text('Motorcycle/Scooter')),
-                            DropdownMenuItem(value: 'BICYCLE', child: Text('Bicycle')),
-                            DropdownMenuItem(value: 'TRUCK', child: Text('Heavy Truck/Bus')),
+                            DropdownMenuItem(
+                                value: 'BIKE',
+                                child: Text('Motorcycle/Scooter')),
+                            DropdownMenuItem(
+                                value: 'BICYCLE', child: Text('Bicycle')),
+                            DropdownMenuItem(
+                                value: 'TRUCK', child: Text('Heavy Truck/Bus')),
                           ],
                           onChanged: (val) {
-                            if (val != null) setState(() => _selectedVehicle = val);
+                            if (val != null)
+                              setState(() => _selectedVehicle = val);
                           },
                         ),
                       ),
@@ -1213,21 +1316,36 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                           isExpanded: true,
                           value: _selectedMount,
                           dropdownColor: const Color(0xFF1E293B),
-                          style: const TextStyle(color: Colors.white, fontSize: 13),
+                          style: const TextStyle(
+                              color: Colors.white, fontSize: 13),
                           decoration: InputDecoration(
                             labelText: 'Mount',
-                            labelStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                            enabledBorder: OutlineInputBorder(borderSide: const BorderSide(color: Color(0xFF334155)), borderRadius: BorderRadius.circular(8)),
+                            labelStyle: const TextStyle(
+                                color: Color(0xFF64748B), fontSize: 11),
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 8),
+                            enabledBorder: OutlineInputBorder(
+                                borderSide:
+                                    const BorderSide(color: Color(0xFF334155)),
+                                borderRadius: BorderRadius.circular(8)),
                           ),
                           items: const [
-                            DropdownMenuItem(value: 'CAR_DASHBOARD', child: Text('Dashboard Mount')),
-                            DropdownMenuItem(value: 'CAR_WINDSHIELD', child: Text('Windshield Holder')),
-                            DropdownMenuItem(value: 'BIKE_HANDLEBAR', child: Text('Handlebar Mount')),
-                            DropdownMenuItem(value: 'HANDHELD', child: Text('Handheld (Degraded)')),
+                            DropdownMenuItem(
+                                value: 'CAR_DASHBOARD',
+                                child: Text('Dashboard Mount')),
+                            DropdownMenuItem(
+                                value: 'CAR_WINDSHIELD',
+                                child: Text('Windshield Holder')),
+                            DropdownMenuItem(
+                                value: 'BIKE_HANDLEBAR',
+                                child: Text('Handlebar Mount')),
+                            DropdownMenuItem(
+                                value: 'HANDHELD',
+                                child: Text('Handheld (Degraded)')),
                           ],
                           onChanged: (val) {
-                            if (val != null) setState(() => _selectedMount = val);
+                            if (val != null)
+                              setState(() => _selectedMount = val);
                           },
                         ),
                       ),
@@ -1252,7 +1370,8 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.65),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                    border:
+                        Border.all(color: Colors.white.withValues(alpha: 0.1)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -1265,7 +1384,11 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                             children: [
                               const Text(
                                 'REAL-TIME SENSOR DIAGNOSTICS',
-                                style: TextStyle(color: Color(0xFF64748B), fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                                style: TextStyle(
+                                    color: Color(0xFF64748B),
+                                    fontSize: 8,
+                                    fontWeight: FontWeight.bold,
+                                    letterSpacing: 0.5),
                               ),
                               const SizedBox(height: 2),
                               Text(
@@ -1273,7 +1396,9 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                                     ? 'CALIBRATING: $_calibrationTimeRemaining s remaining'
                                     : 'CALIBRATION LOCKED: ${_calibratedDistance.toStringAsFixed(1)}m wheel-to-cam dist',
                                 style: TextStyle(
-                                  color: _isCalibrating ? const Color(0xFFFBBF24) : const Color(0xFF60A5FA),
+                                  color: _isCalibrating
+                                      ? const Color(0xFFFBBF24)
+                                      : const Color(0xFF60A5FA),
                                   fontSize: 8,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -1282,7 +1407,10 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                           ),
                           Text(
                             'Sampling: ${_actualSamplingRate.toStringAsFixed(0)} Hz',
-                            style: const TextStyle(color: Color(0xFF34D399), fontSize: 10, fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                                color: Color(0xFF34D399),
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
@@ -1291,17 +1419,29 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Expanded(
-                            child: _SensorIndicator(label: 'ACCEL', active: _sensorStatuses['accelerometer'] == SensorAvailability.available),
+                            child: _SensorIndicator(
+                                label: 'ACCEL',
+                                active: _sensorStatuses['accelerometer'] ==
+                                    SensorAvailability.available),
                           ),
                           Expanded(
-                            child: _SensorIndicator(label: 'GYRO', active: _sensorStatuses['gyroscope'] == SensorAvailability.available),
+                            child: _SensorIndicator(
+                                label: 'GYRO',
+                                active: _sensorStatuses['gyroscope'] ==
+                                    SensorAvailability.available),
                           ),
                           Expanded(
-                            child: _SensorIndicator(label: 'GPS', active: _sensorStatuses['gps'] == SensorAvailability.available),
+                            child: _SensorIndicator(
+                                label: 'GPS',
+                                active: _sensorStatuses['gps'] ==
+                                    SensorAvailability.available),
                           ),
                           Text(
                             'Accuracy: ±${_gpsAccuracy.toStringAsFixed(1)}m',
-                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
@@ -1317,14 +1457,19 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                   decoration: BoxDecoration(
                     color: Colors.black.withValues(alpha: 0.65),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                    border:
+                        Border.all(color: Colors.white.withValues(alpha: 0.15)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
                         'LIVE TRIP ACCELERATION WAVEFORM',
-                        style: TextStyle(color: Color(0xFF64748B), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1.0),
+                        style: TextStyle(
+                            color: Color(0xFF64748B),
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.0),
                       ),
                       const SizedBox(height: 6),
                       Expanded(
@@ -1353,17 +1498,25 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                 color: const Color(0xFFEC4899).withValues(alpha: 0.9),
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
-                  BoxShadow(color: const Color(0xFFEC4899).withValues(alpha: 0.4), blurRadius: 10, spreadRadius: 2),
+                  BoxShadow(
+                      color: const Color(0xFFEC4899).withValues(alpha: 0.4),
+                      blurRadius: 10,
+                      spreadRadius: 2),
                 ],
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.camera_alt_rounded, color: Colors.white, size: 20),
+                  const Icon(Icons.camera_alt_rounded,
+                      color: Colors.white, size: 20),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       _overlayVisualText!,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13, fontFamily: 'Inter'),
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          fontFamily: 'Inter'),
                     ),
                   ),
                 ],
@@ -1384,17 +1537,25 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                 color: const Color(0xFFFBBF24).withValues(alpha: 0.95),
                 borderRadius: BorderRadius.circular(12),
                 boxShadow: [
-                  BoxShadow(color: const Color(0xFFFBBF24).withValues(alpha: 0.4), blurRadius: 10, spreadRadius: 2),
+                  BoxShadow(
+                      color: const Color(0xFFFBBF24).withValues(alpha: 0.4),
+                      blurRadius: 10,
+                      spreadRadius: 2),
                 ],
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.sensors_rounded, color: Colors.black, size: 20),
+                  const Icon(Icons.sensors_rounded,
+                      color: Colors.black, size: 20),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       _overlayVibrationText!,
-                      style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 13, fontFamily: 'Inter'),
+                      style: const TextStyle(
+                          color: Colors.black,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          fontFamily: 'Inter'),
                     ),
                   ),
                 ],
@@ -1418,16 +1579,21 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                     context: context,
                     builder: (context) => AlertDialog(
                       backgroundColor: const Color(0xFF1E293B),
-                      title: const Text('Exit Scan Mode?', style: TextStyle(color: Colors.white)),
-                      content: const Text('Are you sure you want to discard this scanning session? Unsaved data will be lost.', style: TextStyle(color: Colors.white70)),
+                      title: const Text('Exit Scan Mode?',
+                          style: TextStyle(color: Colors.white)),
+                      content: const Text(
+                          'Are you sure you want to discard this scanning session? Unsaved data will be lost.',
+                          style: TextStyle(color: Colors.white70)),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(context, false),
-                          child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+                          child: const Text('Cancel',
+                              style: TextStyle(color: Colors.white54)),
                         ),
                         TextButton(
                           onPressed: () => Navigator.pop(context, true),
-                          child: const Text('Discard & Exit', style: TextStyle(color: Colors.redAccent)),
+                          child: const Text('Discard & Exit',
+                              style: TextStyle(color: Colors.redAccent)),
                         ),
                       ],
                     ),
@@ -1462,8 +1628,7 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
         ),
 
         // ── Capture flash ──
-        if (_isSweeping)
-          _CaptureFlashOverlay(captureCount: _captureCount),
+        if (_isSweeping) _CaptureFlashOverlay(captureCount: _captureCount),
       ],
     );
   }
@@ -1491,7 +1656,8 @@ class _SensorIndicator extends StatelessWidget {
         const SizedBox(width: 5),
         Text(
           label,
-          style: const TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.bold),
+          style: const TextStyle(
+              color: Colors.white70, fontSize: 9, fontWeight: FontWeight.bold),
         ),
       ],
     );
@@ -1529,14 +1695,21 @@ class _SummaryStatCard extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: const TextStyle(color: Color(0xFF64748B), fontSize: 11, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                    color: Color(0xFF64748B),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600),
               ),
               Icon(icon, color: color, size: 16),
             ],
           ),
           Text(
             value,
-            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800, fontFamily: 'Inter'),
+            style: const TextStyle(
+                color: Colors.white,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                fontFamily: 'Inter'),
           ),
         ],
       ),
@@ -1583,8 +1756,7 @@ class _TopHud extends StatelessWidget {
           const Spacer(),
           if (isSweeping) ...[
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
                 color: const Color(0xFFEF4444).withValues(alpha: 0.85),
                 borderRadius: BorderRadius.circular(8),
@@ -1609,8 +1781,7 @@ class _TopHud extends StatelessWidget {
             ),
             const SizedBox(width: 12),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
               decoration: BoxDecoration(
                 color: Colors.black45,
                 borderRadius: BorderRadius.circular(8),
@@ -1801,13 +1972,14 @@ class WaveformPainter extends CustomPainter {
 
     final centerY = size.height / 2;
     // Draw 0-line
-    canvas.drawLine(Offset(0, centerY), Offset(size.width, centerY), thresholdPaint);
+    canvas.drawLine(
+        Offset(0, centerY), Offset(size.width, centerY), thresholdPaint);
 
     if (samples.isEmpty) return;
 
     final path = Path();
     final stepX = size.width / 50.0;
-    
+
     for (var i = 0; i < samples.length; i++) {
       final x = i * stepX;
       // Clamp dynamic acceleration within +/- 4 m/s^2 for visualization

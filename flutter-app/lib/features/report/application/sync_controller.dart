@@ -139,34 +139,41 @@ class SyncController extends AsyncNotifier<SyncSummaryState> {
     final repo = ref.read(draftQueueRepositoryProvider);
     final api = ref.read(apiClientProvider);
 
-    final pending = await repo.getPendingDrafts();
-    final draft = pending.cast<ReportPayload?>().firstWhere(
-          (d) => d?.id == draftId,
-          orElse: () => null,
-        );
-    if (draft == null) return;
+    // Fetch the specific draft directly
+    final pendingDrafts = await repo.getPendingDrafts();
+    final draft = pendingDrafts.firstWhere(
+      (d) => d.id == draftId,
+      orElse: () => null,
+    );
+    if (draft == null) {
+      // No such draft; nothing to upload
+      return;
+    }
 
+    // Mark as uploading and increment uploading count
     await dao.markUploading(draftId);
-    _updateState(uploadingCount: 1);
+    _updateState(uploadingCount: (state.valueOrNull?.uploadingCount ?? 0) + 1);
 
     try {
       final response = await api.uploadInfrastructureReport(draft);
       await dao.markSynced(draftId, response.reportId);
       _retryAttempts.remove(draftId);
-      _updateState(uploadingCount: 0);
+      // Decrement uploading count after success
+      _updateState(uploadingCount: (state.valueOrNull?.uploadingCount ?? 1) - 1);
     } catch (e) {
+      // Decrement uploading count on failure
+      _updateState(uploadingCount: (state.valueOrNull?.uploadingCount ?? 1) - 1);
       final attempt = (_retryAttempts[draftId] ?? 0) + 1;
       _retryAttempts[draftId] = attempt;
       await dao.incrementRetry(draftId);
       await dao.markFailed(draftId, e.toString());
-      _updateState(failedCount: 1, uploadingCount: 0, lastError: e.toString());
+      // Increment failed count
+      _updateState(failedCount: (state.valueOrNull?.failedCount ?? 0) + 1, lastError: e.toString());
 
       // Schedule exponential backoff retry
       final delay = _calculateBackoff(attempt);
       _backoffTimers[draftId]?.cancel();
-      _backoffTimers[draftId] = Timer(delay, () {
-        retryDraft(draftId);
-      });
+      _backoffTimers[draftId] = Timer(delay, () => retryDraft(draftId));
     }
   }
 
