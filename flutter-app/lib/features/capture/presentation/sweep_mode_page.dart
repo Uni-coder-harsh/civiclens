@@ -402,23 +402,12 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
   void _stopSweep() async {
     if (!_isSweeping) return;
 
-    _addLog('Scanning stopped. Initiating processing state...');
+    _addLog('Scanning stopped. Navigating to summary review phase...');
     _calibrationTimer?.cancel();
     _calibrationTimer = null;
 
-    if (mounted) {
-      setState(() {
-        _isSweeping = false;
-        _loopActive = false;
-        _isProcessing = true;
-        _processingStep = 0;
-      });
-    } else {
-      _isSweeping = false;
-      _loopActive = false;
-      _isProcessing = true;
-      _processingStep = 0;
-    }
+    _isSweeping = false;
+    _loopActive = false;
 
     _accelSub?.cancel();
     _accelSub = null;
@@ -430,33 +419,6 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
     _gpsSub = null;
     _geoService.stopStream();
 
-    // Clean up rolling frame cache files to prevent storage leak
-    for (final frame in _rollingFrameQueue) {
-      try {
-        final file = File(frame['path'] as String);
-        if (await file.exists()) {
-          await file.delete();
-        }
-      } catch (_) {}
-    }
-    _rollingFrameQueue.clear();
-
-    // Step 1: Compiling road sensor data
-    await Future.delayed(const Duration(milliseconds: 1000));
-    if (!mounted) return;
-    setState(() => _processingStep = 1);
-
-    // Step 2: Uploading multimodal scan payload to backend
-    await Future.delayed(const Duration(milliseconds: 1000));
-    if (!mounted) return;
-    setState(() => _processingStep = 2);
-
-    // Step 3: Running visual-inertial correlation analysis
-    await Future.delayed(const Duration(milliseconds: 1000));
-    if (!mounted) return;
-    setState(() => _processingStep = 3);
-
-    // Step 4: Retrieving suggested contractor portfolios
     try {
       final api = ref.read(apiClientProvider);
       final contractors = await api.fetchLeaderboard(limit: 3);
@@ -484,12 +446,12 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
       ];
     }
 
-    await Future.delayed(const Duration(milliseconds: 800));
-    if (!mounted) return;
-    setState(() {
-      _isProcessing = false;
-      _showSummary = true;
-    });
+    if (mounted) {
+      setState(() {
+        _isProcessing = false;
+        _showSummary = true;
+      });
+    }
   }
 
   void _stopSweepWithoutSummary() {
@@ -1162,75 +1124,124 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
               padding: EdgeInsets.symmetric(vertical: 24),
               child: Center(
                 child: Text(
-                  'No correlated impact events detected.',
+                  'No correlated impact events detected in this sweep.',
                   style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
                 ),
               ),
             )
           else
-            ..._correlatedEvents.map((e) => Card(
-                  color: const Color(0xFF1E293B),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
-                  margin: const EdgeInsets.only(bottom: 10),
-                  child: ListTile(
-                    leading: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFEF4444).withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.warning_amber_rounded,
-                          color: Color(0xFFF87171), size: 20),
-                    ),
-                    title: Text(
-                      '${e.visualClass?.toUpperCase() ?? "POTHOLE"} CANDIDATE',
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13),
-                    ),
-                    subtitle: Text(
-                      'Location: ${e.latitude.toStringAsFixed(4)}, ${e.longitude.toStringAsFixed(4)} • Speed: ${(e.speedMps * 3.6).toStringAsFixed(0)} km/h',
-                      style: const TextStyle(
-                          color: Color(0xFF94A3B8), fontSize: 11),
-                    ),
-                    trailing: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          '${(e.fusedEvidenceScore * 100).toStringAsFixed(0)}%',
-                          style: const TextStyle(
-                              color: Color(0xFF34D399),
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14),
+            ..._correlatedEvents.asMap().entries.map((entry) {
+              final idx = entry.key;
+              final e = entry.value;
+              final hasImage = e.imagePath != null && File(e.imagePath!).existsSync();
+
+              return Card(
+                color: const Color(0xFF1E293B),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14)),
+                margin: const EdgeInsets.only(bottom: 12),
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: SizedBox(
+                          width: 60,
+                          height: 60,
+                          child: hasImage
+                              ? Image.file(
+                                  File(e.imagePath!),
+                                  fit: BoxFit.cover,
+                                )
+                              : Container(
+                                  color: const Color(0xFF334155),
+                                  child: const Icon(Icons.camera_alt_rounded,
+                                      color: Colors.white54, size: 24),
+                                ),
                         ),
-                        const Text('Evidence',
-                            style: TextStyle(
-                                color: Color(0xFF64748B), fontSize: 9)),
-                      ],
-                    ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${e.visualClass?.toUpperCase() ?? "POTHOLE"} FRAME #${idx + 1}',
+                              style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Lat: ${e.latitude.toStringAsFixed(4)}, Lng: ${e.longitude.toStringAsFixed(4)}\nSpeed: ${(e.speedMps * 3.6).toStringAsFixed(0)} km/h • Score: ${(e.fusedEvidenceScore * 100).toStringAsFixed(0)}%',
+                              style: const TextStyle(
+                                  color: Color(0xFF94A3B8), fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline_rounded,
+                            color: Color(0xFFF87171)),
+                        onPressed: () {
+                          setState(() {
+                            _correlatedEvents.removeAt(idx);
+                          });
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Removed frame from report batch.'),
+                              duration: Duration(seconds: 1),
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ),
-                )),
+                ),
+              );
+            }),
 
           const SizedBox(height: 32),
-          ElevatedButton(
-            onPressed: () {
-              setState(() {
-                _showSummary = false;
-              });
-              context.pop();
+          ElevatedButton.icon(
+            onPressed: () async {
+              if (_correlatedEvents.isNotEmpty) {
+                for (final e in _correlatedEvents) {
+                  await _saveMultimodalDraft(e);
+                }
+                ref.read(syncControllerProvider.notifier).syncAll();
+                if (mounted && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                          'Submitted ${_correlatedEvents.length} sweep report frames to database & cloud storage!'),
+                      backgroundColor: const Color(0xFF10B981),
+                    ),
+                  );
+                }
+              }
+              if (mounted && context.mounted) {
+                setState(() {
+                  _showSummary = false;
+                });
+                context.pop();
+              }
             },
+            icon: const Icon(Icons.cloud_upload_rounded, color: Colors.white),
+            label: Text(
+              _correlatedEvents.isEmpty
+                  ? 'Done (Return to Activity)'
+                  : 'Submit ${_correlatedEvents.length} Sweep Report(s) to Server',
+              style: const TextStyle(
+                  fontWeight: FontWeight.bold, color: Colors.white),
+            ),
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF4F46E5),
               padding: const EdgeInsets.symmetric(vertical: 16),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(14)),
             ),
-            child: const Text('Return to Dashboard',
-                style: TextStyle(
-                    fontWeight: FontWeight.bold, color: Colors.white)),
           ),
         ],
       ),
@@ -1626,37 +1637,9 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
               isSweeping: _isSweeping,
               captureCount: _captureCount,
               sweepStartTime: _sweepStartTime,
-              onClose: () async {
+              onClose: () {
                 if (_isSweeping) {
-                  final confirm = await showDialog<bool>(
-                    context: context,
-                    builder: (context) => AlertDialog(
-                      backgroundColor: const Color(0xFF1E293B),
-                      title: const Text('Exit Scan Mode?',
-                          style: TextStyle(color: Colors.white)),
-                      content: const Text(
-                          'Are you sure you want to exit this scanning session?',
-                          style: TextStyle(color: Colors.white70)),
-                      actions: [
-                        TextButton(
-                          onPressed: () => Navigator.pop(context, false),
-                          child: const Text('Cancel',
-                              style: TextStyle(color: Colors.white54)),
-                        ),
-                        TextButton(
-                          onPressed: () => Navigator.pop(context, true),
-                          child: const Text('Exit',
-                              style: TextStyle(color: Colors.redAccent)),
-                        ),
-                      ],
-                    ),
-                  );
-                  if (confirm == true) {
-                    _stopSweepWithoutSummary();
-                    if (context.mounted) {
-                      context.pop();
-                    }
-                  }
+                  _stopSweep();
                 } else {
                   _stopSweepWithoutSummary();
                   if (context.mounted) {
