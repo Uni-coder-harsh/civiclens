@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
@@ -742,8 +743,9 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
           _showVisualOverlay('AI: ${defectClass.toUpperCase()} detected (Queueing)');
         }
 
-        // Keep rolling cache limited to delay + 2 seconds and delete older files
-        final limitMs = (_calibratedDelaySeconds + 2.0) * 1000.0;
+        // Keep rolling cache limited to dynamic velocity-based delay + 2 seconds and delete older files
+        final dynamicDelaySec = _calibratedDistance / max(_speed, 1.5);
+        final limitMs = (dynamicDelaySec + 2.0) * 1000.0;
         while (_rollingFrameQueue.isNotEmpty &&
                (nowMs - (_rollingFrameQueue.first['timestamp_ms'] as int)) > limitMs) {
           final oldFrame = _rollingFrameQueue.removeAt(0);
