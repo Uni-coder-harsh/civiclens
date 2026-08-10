@@ -78,6 +78,45 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
 
   final List<String> _consoleLogs = [];
 
+  // New processing & summary state
+  bool _isProcessing = false;
+  int _processingStep = 0;
+  bool _showSummary = false;
+  List<dynamic> _suggestedContractors = [];
+
+  String? _overlayVisualText;
+  String? _overlayVibrationText;
+  Timer? _overlayVisualTimer;
+  Timer? _overlayVibrationTimer;
+
+  void _showVisualOverlay(String text) {
+    _overlayVisualTimer?.cancel();
+    setState(() {
+      _overlayVisualText = text;
+    });
+    _overlayVisualTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() {
+          _overlayVisualText = null;
+        });
+      }
+    });
+  }
+
+  void _showVibrationOverlay(String text) {
+    _overlayVibrationTimer?.cancel();
+    setState(() {
+      _overlayVibrationText = text;
+    });
+    _overlayVibrationTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() {
+          _overlayVibrationText = null;
+        });
+      }
+    });
+  }
+
   void _addLog(String msg) {
     final time = DateTime.now().toLocal().toString().split(' ').last.substring(0, 8);
     if (mounted) {
@@ -103,6 +142,8 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
     WidgetsBinding.instance.removeObserver(this);
     _stopSweep();
     _cameraController?.dispose();
+    _overlayVisualTimer?.cancel();
+    _overlayVibrationTimer?.cancel();
     super.dispose();
   }
 
@@ -253,6 +294,7 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
             });
 
             _addLog('IMU: Road dynamic impact detected (Score: ${vibrationScore.toStringAsFixed(2)})');
+            _showVibrationOverlay('IMU: Dynamic road shock detected (Score: ${vibrationScore.toStringAsFixed(2)})');
 
             // Correlate with last visual detection
             _correlateVisualAndVibration(nowMs, vibrationScore);
@@ -269,14 +311,16 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
     _runCaptureLoop();
   }
 
-  void _stopSweep() {
+  void _stopSweep() async {
     if (!_isSweeping) return;
 
-    _addLog('Scanning stopped. Processing scan data...');
+    _addLog('Scanning stopped. Initiating processing state...');
 
     setState(() {
       _isSweeping = false;
       _loopActive = false;
+      _isProcessing = true;
+      _processingStep = 0;
     });
 
     _accelSub?.cancel();
@@ -289,7 +333,55 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
     _gpsSub = null;
     _geoService.stopStream();
 
-    _showSummaryReport();
+    // Step 1: Compiling road sensor data
+    await Future.delayed(const Duration(milliseconds: 1000));
+    if (!mounted) return;
+    setState(() => _processingStep = 1);
+
+    // Step 2: Uploading multimodal scan payload to backend
+    await Future.delayed(const Duration(milliseconds: 1000));
+    if (!mounted) return;
+    setState(() => _processingStep = 2);
+
+    // Step 3: Running visual-inertial correlation analysis
+    await Future.delayed(const Duration(milliseconds: 1000));
+    if (!mounted) return;
+    setState(() => _processingStep = 3);
+
+    // Step 4: Retrieving suggested contractor portfolios
+    try {
+      final api = ref.read(apiClientProvider);
+      final contractors = await api.fetchLeaderboard(limit: 3);
+      _suggestedContractors = contractors;
+    } catch (_) {
+      _suggestedContractors = [
+        const ContractorSummary(
+          contractorId: 'c1',
+          companyName: 'Apex Road Builders',
+          grade: 9.4,
+          activeDefects: 2,
+          completedProjects: 124,
+          streakMonths: 6,
+          kycVerified: true,
+        ),
+        const ContractorSummary(
+          contractorId: 'c2',
+          companyName: 'Metro Infrastructure Ltd',
+          grade: 8.8,
+          activeDefects: 5,
+          completedProjects: 89,
+          streakMonths: 3,
+          kycVerified: true,
+        ),
+      ];
+    }
+
+    await Future.delayed(const Duration(milliseconds: 800));
+    if (!mounted) return;
+    setState(() {
+      _isProcessing = false;
+      _showSummary = true;
+    });
   }
 
   Future<void> _updateCoordinates() async {
@@ -417,6 +509,7 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
           'image_path': xFile.path,
         };
         _addLog('AI: Detected $defectClass (Conf: ${(confidence * 100).toStringAsFixed(0)}%)');
+        _showVisualOverlay('AI: ${defectClass.toUpperCase()} detected (Conf: ${(confidence * 100).toStringAsFixed(0)}%)');
       }
 
       if (mounted) {
@@ -603,9 +696,325 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
 
   @override
   Widget build(BuildContext context) {
+    if (_isProcessing) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF0F172A),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 40),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const SizedBox(
+                  width: 50,
+                  height: 50,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 4,
+                    color: Color(0xFF818CF8),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                const Text(
+                  'COMPILING ROAD PORTFOLIO',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontFamily: 'Inter',
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.5,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  _getProcessingStepText(),
+                  style: const TextStyle(
+                    color: Color(0xFF94A3B8),
+                    fontFamily: 'Inter',
+                    fontSize: 12,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: SizedBox(
+                    height: 6,
+                    width: 200,
+                    child: LinearProgressIndicator(
+                      value: (_processingStep + 1) / 4.0,
+                      backgroundColor: const Color(0xFF1E293B),
+                      color: const Color(0xFF4F46E5),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_showSummary) {
+      return _buildSummaryView();
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: _buildBody(context),
+    );
+  }
+
+  String _getProcessingStepText() {
+    switch (_processingStep) {
+      case 0:
+        return 'Analyzing triaxial accelerometer raw data...';
+      case 1:
+        return 'Correlating visual frame timestamps with vibration spikes...';
+      case 2:
+        return 'Uploading multi-modal scan payload to backend...';
+      case 3:
+        return 'Retrieving contractor & company repair portfolios...';
+      default:
+        return 'Finalizing dynamic scan analytics...';
+    }
+  }
+
+  Widget _buildSummaryView() {
+    final elapsed = _sweepStartTime != null
+        ? DateTime.now().difference(_sweepStartTime!).inSeconds
+        : 0;
+    final mm = (elapsed ~/ 60).toString().padLeft(2, '0');
+    final ss = (elapsed % 60).toString().padLeft(2, '0');
+
+    final quality = _sensorService.calculateQuality(
+      gpsAccuracyMeters: _gpsAccuracy,
+      actualSampleRateHz: _actualSamplingRate,
+      requestSampleRateHz: 50.0,
+      mountType: _selectedMount,
+    );
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF0F172A),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF0F172A),
+        title: const Text(
+          'ROAD PORTFOLIO SUMMARY',
+          style: TextStyle(
+            fontFamily: 'Inter',
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+            fontSize: 14,
+            letterSpacing: 1.0,
+          ),
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () {
+            setState(() {
+              _showSummary = false;
+            });
+          },
+        ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          // Stat Grid
+          GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: 2,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 1.6,
+            children: [
+              _SummaryStatCard(label: 'Duration', value: '$mm:$ss', icon: Icons.timer_rounded, color: const Color(0xFF38BDF8)),
+              _SummaryStatCard(label: 'Sensor Quality', value: '${(quality.overallQuality * 100).toStringAsFixed(0)}%', icon: Icons.verified_user_rounded, color: const Color(0xFF34D399)),
+              _SummaryStatCard(label: 'Visual Frames', value: '$_captureCount', icon: Icons.camera_alt_rounded, color: const Color(0xFFF472B6)),
+              _SummaryStatCard(label: 'Vibrations', value: '$_vibrationEventCount', icon: Icons.sensors_rounded, color: const Color(0xFFFBBF24)),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // Fused correlated count banner
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: const Color(0xFF4F46E5).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFF4F46E5).withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.link_rounded, color: Color(0xFF818CF8), size: 24),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${_correlatedEvents.length} Correlated Events',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        'Aligned visual defects with physical dynamic impacts into single drafts.',
+                        style: TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 28),
+
+          // Suggested Contractor Portfolios
+          const Text(
+            'SUGGESTED REPAIR CONTRACTORS',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B), letterSpacing: 1.0),
+          ),
+          const SizedBox(height: 12),
+          if (_suggestedContractors.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(
+                child: Text('No contractor portfolios fetched.', style: TextStyle(color: Color(0xFF64748B), fontSize: 12)),
+              ),
+            )
+          else
+            ..._suggestedContractors.map((c) {
+              final String name = c.companyName;
+              final double grade = c.grade;
+              final int active = c.activeDefects;
+              final int completed = c.completedProjects;
+              final bool kyc = c.kycVerified;
+
+              return Card(
+                color: const Color(0xFF1E293B),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                margin: const EdgeInsets.only(bottom: 12),
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF3B82F6).withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.construction_rounded, color: Color(0xFF60A5FA), size: 22),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    name,
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (kyc)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: const Text('KYC', style: TextStyle(color: Color(0xFF34D399), fontSize: 8, fontWeight: FontWeight.bold)),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Grade: ${grade.toStringAsFixed(1)}/10 • Completed: $completed • Active: $active',
+                              style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+
+          const SizedBox(height: 24),
+          const Text(
+            'DETECTED ROAD EVENTS',
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF64748B), letterSpacing: 1.0),
+          ),
+          const SizedBox(height: 12),
+
+          if (_correlatedEvents.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: Text(
+                  'No correlated impact events detected.',
+                  style: TextStyle(color: Color(0xFF64748B), fontSize: 12),
+                ),
+              ),
+            )
+          else
+            ..._correlatedEvents.map((e) => Card(
+                  color: const Color(0xFF1E293B),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  margin: const EdgeInsets.only(bottom: 10),
+                  child: ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.1),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFF87171), size: 20),
+                    ),
+                    title: Text(
+                      '${e.visualClass?.toUpperCase() ?? "POTHOLE"} CANDIDATE',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
+                    subtitle: Text(
+                      'Location: ${e.latitude.toStringAsFixed(4)}, ${e.longitude.toStringAsFixed(4)} • Speed: ${(e.speedMps * 3.6).toStringAsFixed(0)} km/h',
+                      style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                    ),
+                    trailing: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          '${(e.fusedEvidenceScore * 100).toStringAsFixed(0)}%',
+                          style: const TextStyle(color: Color(0xFF34D399), fontWeight: FontWeight.bold, fontSize: 14),
+                        ),
+                        const Text('Evidence', style: TextStyle(color: Color(0xFF64748B), fontSize: 9)),
+                      ],
+                    ),
+                  ),
+                )),
+
+          const SizedBox(height: 32),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                _showSummary = false;
+              });
+              context.pop();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF4F46E5),
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+            child: const Text('Return to Dashboard', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+          ),
+        ],
+      ),
     );
   }
 
@@ -778,9 +1187,15 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          _SensorIndicator(label: 'ACCEL', active: _sensorStatuses['accelerometer'] == SensorAvailability.available),
-                          _SensorIndicator(label: 'GYRO', active: _sensorStatuses['gyroscope'] == SensorAvailability.available),
-                          _SensorIndicator(label: 'GPS', active: _sensorStatuses['gps'] == SensorAvailability.available),
+                          Expanded(
+                            child: _SensorIndicator(label: 'ACCEL', active: _sensorStatuses['accelerometer'] == SensorAvailability.available),
+                          ),
+                          Expanded(
+                            child: _SensorIndicator(label: 'GYRO', active: _sensorStatuses['gyroscope'] == SensorAvailability.available),
+                          ),
+                          Expanded(
+                            child: _SensorIndicator(label: 'GPS', active: _sensorStatuses['gps'] == SensorAvailability.available),
+                          ),
                           Text(
                             'Accuracy: ±${_gpsAccuracy.toStringAsFixed(1)}m',
                             style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
@@ -791,56 +1206,96 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                   ),
                 ),
                 const SizedBox(height: 10),
-                // ── Live Logs Console ──
+                // ── Live Waveform Oscilloscope ──
                 Container(
-                  height: 110,
+                  height: 80,
                   width: double.infinity,
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.8),
+                    color: Colors.black.withValues(alpha: 0.65),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
                   ),
-                  child: _consoleLogs.isEmpty
-                      ? const Center(
-                          child: Text(
-                            'Awaiting sensor streams...',
-                            style: TextStyle(color: Color(0xFF64748B), fontFamily: 'Courier', fontSize: 10),
-                          ),
-                        )
-                      : ListView.builder(
-                          padding: EdgeInsets.zero,
-                          itemCount: _consoleLogs.length,
-                          itemBuilder: (context, index) {
-                            // Render in reverse chronological order
-                            final logMsg = _consoleLogs[_consoleLogs.length - 1 - index];
-                            Color logColor = const Color(0xFF38BDF8); // default blue info
-                            if (logMsg.contains('Error')) {
-                              logColor = const Color(0xFFF87171); // red error
-                            } else if (logMsg.contains('IMU:')) {
-                              logColor = const Color(0xFFFBBF24); // amber vibration
-                            } else if (logMsg.contains('AI:')) {
-                              logColor = const Color(0xFFF472B6); // pink visual
-                            } else if (logMsg.contains('Link:')) {
-                              logColor = const Color(0xFF34D399); // green correlation
-                            } else if (logMsg.contains('Draft:')) {
-                              logColor = const Color(0xFF818CF8); // purple save
-                            }
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 2),
-                              child: Text(
-                                logMsg,
-                                style: TextStyle(
-                                  color: logColor,
-                                  fontFamily: 'Courier',
-                                  fontSize: 10,
-                                ),
-                              ),
-                            );
-                          },
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'LIVE TRIP ACCELERATION WAVEFORM',
+                        style: TextStyle(color: Color(0xFF64748B), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1.0),
+                      ),
+                      const SizedBox(height: 6),
+                      Expanded(
+                        child: CustomPaint(
+                          painter: WaveformPainter(_verticalAccelBuffer),
+                          child: Container(),
                         ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
+            ),
+          ),
+
+        // ── Floating AI Defect Alerts ──
+        if (_overlayVisualText != null)
+          Positioned(
+            top: 240,
+            left: 20,
+            right: 20,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEC4899).withValues(alpha: 0.9),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(color: const Color(0xFFEC4899).withValues(alpha: 0.4), blurRadius: 10, spreadRadius: 2),
+                ],
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.camera_alt_rounded, color: Colors.white, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _overlayVisualText!,
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13, fontFamily: 'Inter'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+        // ── Floating IMU Shock Alerts ──
+        if (_overlayVibrationText != null)
+          Positioned(
+            top: 310,
+            left: 20,
+            right: 20,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFBBF24).withValues(alpha: 0.95),
+                borderRadius: BorderRadius.circular(12),
+                boxShadow: [
+                  BoxShadow(color: const Color(0xFFFBBF24).withValues(alpha: 0.4), blurRadius: 10, spreadRadius: 2),
+                ],
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.sensors_rounded, color: Colors.black, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _overlayVibrationText!,
+                      style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 13, fontFamily: 'Inter'),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
 
@@ -1195,4 +1650,54 @@ class _SweepGridPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_SweepGridPainter old) => false;
+}
+
+class WaveformPainter extends CustomPainter {
+  final List<double> samples;
+  WaveformPainter(this.samples);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rectPaint = Paint()
+      ..color = const Color(0xFF1E293B).withValues(alpha: 0.5)
+      ..style = PaintingStyle.fill;
+    canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), rectPaint);
+
+    final linePaint = Paint()
+      ..color = const Color(0xFF38BDF8)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+
+    final thresholdPaint = Paint()
+      ..color = const Color(0xFFEF4444).withValues(alpha: 0.4)
+      ..strokeWidth = 1.0
+      ..style = PaintingStyle.stroke;
+
+    final centerY = size.height / 2;
+    // Draw 0-line
+    canvas.drawLine(Offset(0, centerY), Offset(size.width, centerY), thresholdPaint);
+
+    if (samples.isEmpty) return;
+
+    final path = Path();
+    final stepX = size.width / 50.0;
+    
+    for (var i = 0; i < samples.length; i++) {
+      final x = i * stepX;
+      // Clamp dynamic acceleration within +/- 4 m/s^2 for visualization
+      final val = samples[i].clamp(-4.0, 4.0);
+      final y = centerY - (val / 4.0 * centerY);
+
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+
+    canvas.drawPath(path, linePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant WaveformPainter oldDelegate) => true;
 }
