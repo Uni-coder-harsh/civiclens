@@ -17,42 +17,53 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        'civic_reports',
-        sa.Column('id', postgresql.UUID(as_uuid=True), primary_key=True, nullable=False),
-        sa.Column('client_id', sa.String(255), nullable=False),
-        sa.Column('user_id', sa.String(255), nullable=False),
-        sa.Column('is_guest', sa.Boolean(), nullable=False, server_default='false'),
-        sa.Column('category', sa.String(100), nullable=False),
-        sa.Column('severity', sa.String(50), nullable=False),
-        sa.Column('description', sa.Text(), nullable=True),
-        sa.Column('latitude', sa.Float(), nullable=False),
-        sa.Column('longitude', sa.Float(), nullable=False),
-        sa.Column('altitude_m', sa.Float(), nullable=True),
-        sa.Column('accuracy_m', sa.Float(), nullable=True),
-        sa.Column('bearing_deg', sa.Float(), nullable=True),
-        sa.Column('speed_mps', sa.Float(), nullable=True),
-        sa.Column('captured_at', sa.DateTime(timezone=True), nullable=True),
-        sa.Column('image_url', sa.String(2048), nullable=True),
-        sa.Column('thumbnail_url', sa.String(2048), nullable=True),
-        sa.Column('quality_gate', sa.String(50), nullable=False, server_default='ok'),
-        sa.Column('status', sa.String(50), nullable=False, server_default='submitted'),
-        sa.Column('contractor_id', sa.String(255), nullable=True),
-        sa.Column('infrastructure_id', sa.String(255), nullable=True),
-        sa.Column('sensor_data', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column('ai_confidence', sa.Float(), nullable=True),
-        sa.Column('ai_label', sa.String(255), nullable=True),
-        sa.Column('civic_score_delta', sa.Integer(), nullable=False, server_default='10'),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
-        sa.Column('created_by', postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column('updated_by', postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column('deleted_at', sa.DateTime(timezone=True), nullable=True),
-        sa.Column('is_deleted', sa.Boolean(), nullable=False, server_default='false'),
-        sa.Column('version', sa.Integer(), nullable=False, server_default='1'),
-        if_not_exists=True,
-    )
+    # Use raw SQL with IF NOT EXISTS so this is idempotent even if re-run
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS civic_reports (
+            id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            client_id       VARCHAR(255) NOT NULL,
+            user_id         VARCHAR(255) NOT NULL,
+            is_guest        BOOLEAN NOT NULL DEFAULT FALSE,
+            category        VARCHAR(100) NOT NULL,
+            severity        VARCHAR(50)  NOT NULL,
+            description     TEXT,
+            latitude        FLOAT NOT NULL,
+            longitude       FLOAT NOT NULL,
+            altitude_m      FLOAT,
+            accuracy_m      FLOAT,
+            bearing_deg     FLOAT,
+            speed_mps       FLOAT,
+            captured_at     TIMESTAMPTZ,
+            image_url       VARCHAR(2048),
+            thumbnail_url   VARCHAR(2048),
+            quality_gate    VARCHAR(50)  NOT NULL DEFAULT 'ok',
+            status          VARCHAR(50)  NOT NULL DEFAULT 'submitted',
+            contractor_id   VARCHAR(255),
+            infrastructure_id VARCHAR(255),
+            sensor_data     JSONB,
+            ai_confidence   FLOAT,
+            ai_label        VARCHAR(255),
+            civic_score_delta INTEGER NOT NULL DEFAULT 10,
+            created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            created_by      UUID,
+            updated_by      UUID,
+            deleted_at      TIMESTAMPTZ,
+            is_deleted      BOOLEAN NOT NULL DEFAULT FALSE,
+            version         INTEGER NOT NULL DEFAULT 1
+        );
+    """)
+
+    op.execute("""
+        CREATE INDEX IF NOT EXISTS ix_civic_reports_client_id ON civic_reports (client_id);
+    """)
+    op.execute("""
+        CREATE INDEX IF NOT EXISTS ix_civic_reports_user_id ON civic_reports (user_id);
+    """)
+    op.execute("""
+        CREATE INDEX IF NOT EXISTS ix_civic_reports_status ON civic_reports (status);
+    """)
 
 
 def downgrade() -> None:
-    op.drop_table('civic_reports')
+    op.execute("DROP TABLE IF EXISTS civic_reports CASCADE;")

@@ -457,13 +457,14 @@ class _DraftCard extends ConsumerWidget {
                     top: BorderSide(
                         color: _borderColor(item.syncState).withOpacity(0.15))),
               ),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               child: Row(
                 children: [
                   _SyncChip(syncState: item.syncState),
                   const Spacer(),
-                  if (item.syncState == SyncState.failed)
+                  // Retry button for failed or pending drafts
+                  if (item.syncState == SyncState.failed ||
+                      item.syncState == SyncState.pending)
                     GestureDetector(
                       onTap: () {
                         ref
@@ -505,6 +506,69 @@ class _DraftCard extends ConsumerWidget {
                         fontSize: 11,
                       ),
                     ),
+                  const SizedBox(width: 8),
+                  // Delete button — always visible
+                  GestureDetector(
+                    onTap: () async {
+                      final confirmed = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              backgroundColor: const Color(0xFF1E293B),
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16)),
+                              title: Text('Delete report?',
+                                  style: TextStyle(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurface,
+                                      fontFamily: 'Inter',
+                                      fontWeight: FontWeight.w700)),
+                              content: const Text(
+                                  'This will permanently remove the report.',
+                                  style: TextStyle(
+                                      color: Color(0xFF94A3B8),
+                                      fontFamily: 'Inter')),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(ctx, false),
+                                  child: const Text('Cancel',
+                                      style: TextStyle(
+                                          color: Color(0xFF64748B),
+                                          fontFamily: 'Inter')),
+                                ),
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.pop(ctx, true),
+                                  child: const Text('Delete',
+                                      style: TextStyle(
+                                          color: Color(0xFFDC2626),
+                                          fontFamily: 'Inter',
+                                          fontWeight: FontWeight.w600)),
+                                ),
+                              ],
+                            ),
+                          ) ??
+                          false;
+                      if (confirmed) {
+                        ref
+                            .read(draftQueueRepositoryProvider)
+                            .deleteDraft(draft.id);
+                      }
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFDC2626).withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                            color: const Color(0xFFDC2626).withOpacity(0.25)),
+                      ),
+                      child: const Icon(Icons.delete_outline_rounded,
+                          size: 14, color: Color(0xFFDC2626)),
+                    ),
+                  ),
                 ],
               ),
             ),
