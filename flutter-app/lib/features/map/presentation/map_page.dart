@@ -21,12 +21,14 @@ class _MapViewState {
   final bool isLoading;
   final bool showCoverage;
   final NearbyDefect? selectedDefect;
+  final LatLng? userLocation;
 
   const _MapViewState({
     this.defects = const [],
     this.isLoading = false,
     this.showCoverage = false,
     this.selectedDefect,
+    this.userLocation,
   });
 
   _MapViewState copyWith({
@@ -34,6 +36,7 @@ class _MapViewState {
     bool? isLoading,
     bool? showCoverage,
     NearbyDefect? selectedDefect,
+    LatLng? userLocation,
     bool clearSelected = false,
   }) =>
       _MapViewState(
@@ -42,6 +45,7 @@ class _MapViewState {
         showCoverage: showCoverage ?? this.showCoverage,
         selectedDefect:
             clearSelected ? null : (selectedDefect ?? this.selectedDefect),
+        userLocation: userLocation ?? this.userLocation,
       );
 }
 
@@ -91,15 +95,30 @@ class _MapNotifier extends Notifier<_MapViewState> {
       );
       final center = LatLng(position.latitude, position.longitude);
       _lastCenter = center;
+      state = state.copyWith(userLocation: center);
       if (controller != null) {
-        controller.move(center, 13);
+        controller.move(center, 16.5);
       }
       await _fetchDefects(position.latitude, position.longitude);
     } catch (_) {
+      try {
+        final lastKnown = await Geolocator.getLastKnownPosition();
+        if (lastKnown != null) {
+          final center = LatLng(lastKnown.latitude, lastKnown.longitude);
+          _lastCenter = center;
+          state = state.copyWith(userLocation: center);
+          if (controller != null) {
+            controller.move(center, 16.5);
+          }
+          await _fetchDefects(lastKnown.latitude, lastKnown.longitude);
+          return;
+        }
+      } catch (_) {}
+
       if (_lastCenter != null) {
         await _fetchDefects(_lastCenter!.latitude, _lastCenter!.longitude);
       } else {
-        await _fetchDefects(28.6139, 77.2090); // New Delhi
+        await _fetchDefects(18.5204, 73.8567); // Pune
       }
     }
   }
@@ -146,7 +165,7 @@ class _MapPageState extends ConsumerState<MapPage> {
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
-              initialCenter: const LatLng(28.6139, 77.2090),
+              initialCenter: const LatLng(18.5204, 73.8567),
               initialZoom: 13,
               minZoom: 3,
               maxZoom: 18,
@@ -161,7 +180,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                 retinaMode: RetinaMode.isHighDensity(context),
               ),
               MarkerLayer(
-                markers: _buildMarkers(mapState.defects),
+                markers: _buildMarkers(mapState.defects, mapState.userLocation),
               ),
             ],
           ),
@@ -475,8 +494,8 @@ class _MapPageState extends ConsumerState<MapPage> {
     );
   }
 
-  List<Marker> _buildMarkers(List<NearbyDefect> defects) {
-    return defects.map((defect) {
+  List<Marker> _buildMarkers(List<NearbyDefect> defects, LatLng? userLocation) {
+    final list = defects.map((defect) {
       return Marker(
         point: LatLng(defect.latitude, defect.longitude),
         width: 45,
@@ -504,6 +523,57 @@ class _MapPageState extends ConsumerState<MapPage> {
         ),
       );
     }).toList();
+
+    if (userLocation != null) {
+      list.add(
+        Marker(
+          point: userLocation,
+          width: 36,
+          height: 36,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Pulse glow ring
+              Container(
+                width: 32,
+                height: 32,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF3B82F6).withValues(alpha: 0.25),
+                ),
+              ),
+              // White border circle
+              Container(
+                width: 14,
+                height: 14,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black26,
+                      blurRadius: 4,
+                      offset: Offset(0, 1),
+                    )
+                  ],
+                ),
+              ),
+              // Blue inner circle
+              Container(
+                width: 10,
+                height: 10,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Color(0xFF3B82F6),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return list;
   }
 
   Color _statusColor(DefectStatus s) {
