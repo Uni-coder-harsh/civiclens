@@ -59,6 +59,7 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
   StreamSubscription<AccelerometerEvent>? _accelSub;
   StreamSubscription<GyroscopeEvent>? _gyroSub;
   StreamSubscription<GpsAccuracyBadge>? _gpsBadgeSub;
+  StreamSubscription<Position>? _gpsSub;
 
   // Counters and event records
   int _captureCount = 0;
@@ -74,6 +75,21 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
   Map<String, dynamic>? _lastVisualEvent;
   final List<Map<String, dynamic>> _detectedVibrations = [];
   final List<MultimodalRoadEvent> _correlatedEvents = [];
+
+  final List<String> _consoleLogs = [];
+
+  void _addLog(String msg) {
+    final time = DateTime.now().toLocal().toString().split(' ').last.substring(0, 8);
+    if (mounted) {
+      setState(() {
+        _consoleLogs.add('[$time] $msg');
+        if (_consoleLogs.length > 25) {
+          _consoleLogs.removeAt(0);
+        }
+      });
+    }
+    debugPrint('[SweepMode] $msg');
+  }
 
   @override
   void initState() {
@@ -157,6 +173,7 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
     _detectedVibrations.clear();
     _correlatedEvents.clear();
     _lastVisualEvent = null;
+    _consoleLogs.clear();
 
     setState(() {
       _isSweeping = true;
@@ -166,11 +183,28 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
       _loopActive = true;
     });
 
-    // Start GPS Badge stream
+    _addLog('Scanning started (Vehicle: $_selectedVehicle, Mount: $_selectedMount)');
+
+    // Start GPS stream
     _geoService.startStream();
+    _gpsSub = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 0,
+      ),
+    ).listen((pos) {
+      if (mounted) {
+        setState(() {
+          _latitude = pos.latitude;
+          _longitude = pos.longitude;
+          _gpsAccuracy = pos.accuracy;
+          _speed = pos.speed;
+        });
+      }
+    });
+
     _gpsBadgeSub = _geoService.accuracyBadgeStream.listen((badge) {
-      // Geolocator stream triggers coordinate updates
-      _updateCoordinates();
+      _addLog('GPS status: ${badge.label}');
     });
 
     // Start IMU streams
@@ -218,6 +252,8 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
               'jerk': jerk,
             });
 
+            _addLog('IMU: Road dynamic impact detected (Score: ${vibrationScore.toStringAsFixed(2)})');
+
             // Correlate with last visual detection
             _correlateVisualAndVibration(nowMs, vibrationScore);
           }
@@ -236,6 +272,8 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
   void _stopSweep() {
     if (!_isSweeping) return;
 
+    _addLog('Scanning stopped. Processing scan data...');
+
     setState(() {
       _isSweeping = false;
       _loopActive = false;
@@ -247,6 +285,8 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
     _gyroSub = null;
     _gpsBadgeSub?.cancel();
     _gpsBadgeSub = null;
+    _gpsSub?.cancel();
+    _gpsSub = null;
     _geoService.stopStream();
 
     _showSummaryReport();
@@ -303,6 +343,7 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
       setState(() {
         _correlatedEvents.add(mme);
       });
+      _addLog('Link: Aligned vibration with $visualClass (Confidence: ${(mme.fusedEvidenceScore * 100).toStringAsFixed(0)}%)');
       _saveMultimodalDraft(mme);
     }
   }
@@ -336,9 +377,9 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
     try {
       final repo = ref.read(draftQueueRepositoryProvider);
       await repo.saveDraft(payload);
-      debugPrint('[SweepMode] Successfully saved multimodal correlated draft: ${mme.id}');
+      _addLog('Draft: Linked event saved to local SQLite draft queue');
     } catch (e) {
-      debugPrint('[SweepMode] Failed to save draft: $e');
+      _addLog('Error: Failed to save draft: $e');
     }
   }
 
@@ -358,7 +399,6 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
 
     try {
       final xFile = await _cameraController!.takePicture();
-      await _updateCoordinates();
 
       // Mock visual AI checks
       final hasVisualDefect = Random().nextDouble() > 0.6; // 40% chance of visual defect
@@ -367,6 +407,8 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
 
       final nowMs = DateTime.now().millisecondsSinceEpoch;
 
+      _addLog('Camera: Frame #${_captureCount + 1} captured');
+
       if (hasVisualDefect) {
         _lastVisualEvent = {
           'timestamp_ms': nowMs,
@@ -374,13 +416,14 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
           'class': defectClass,
           'image_path': xFile.path,
         };
+        _addLog('AI: Detected $defectClass (Conf: ${(confidence * 100).toStringAsFixed(0)}%)');
       }
 
       if (mounted) {
         setState(() => _captureCount++);
       }
     } catch (e) {
-      debugPrint('[SweepMode] Frame capture error: $e');
+      _addLog('Camera Error: Frame capture failed: $e');
     }
   }
 
@@ -647,6 +690,7 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                     children: [
                       Expanded(
                         child: DropdownButtonFormField<String>(
+                          isExpanded: true,
                           value: _selectedVehicle,
                           dropdownColor: const Color(0xFF1E293B),
                           style: const TextStyle(color: Colors.white, fontSize: 13),
@@ -670,6 +714,7 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
                       const SizedBox(width: 12),
                       Expanded(
                         child: DropdownButtonFormField<String>(
+                          isExpanded: true,
                           value: _selectedMount,
                           dropdownColor: const Color(0xFF1E293B),
                           style: const TextStyle(color: Colors.white, fontSize: 13),
@@ -703,44 +748,99 @@ class _SweepModePageState extends ConsumerState<SweepModePage>
             top: 80,
             left: 20,
             right: 20,
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.65),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.65),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'REAL-TIME SENSOR DIAGNOSTICS',
-                        style: TextStyle(color: Color(0xFF64748B), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1.0),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'REAL-TIME SENSOR DIAGNOSTICS',
+                            style: TextStyle(color: Color(0xFF64748B), fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1.0),
+                          ),
+                          Text(
+                            'Sampling: ${_actualSamplingRate.toStringAsFixed(0)} Hz',
+                            style: const TextStyle(color: Color(0xFF34D399), fontSize: 10, fontWeight: FontWeight.bold),
+                          ),
+                        ],
                       ),
-                      Text(
-                        'Sampling: ${_actualSamplingRate.toStringAsFixed(0)} Hz',
-                        style: const TextStyle(color: Color(0xFF34D399), fontSize: 10, fontWeight: FontWeight.bold),
+                      const Divider(color: Color(0xFF334155), height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          _SensorIndicator(label: 'ACCEL', active: _sensorStatuses['accelerometer'] == SensorAvailability.available),
+                          _SensorIndicator(label: 'GYRO', active: _sensorStatuses['gyroscope'] == SensorAvailability.available),
+                          _SensorIndicator(label: 'GPS', active: _sensorStatuses['gps'] == SensorAvailability.available),
+                          Text(
+                            'Accuracy: ±${_gpsAccuracy.toStringAsFixed(1)}m',
+                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                  const Divider(color: Color(0xFF334155), height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      _SensorIndicator(label: 'ACCEL', active: _sensorStatuses['accelerometer'] == SensorAvailability.available),
-                      _SensorIndicator(label: 'GYRO', active: _sensorStatuses['gyroscope'] == SensorAvailability.available),
-                      _SensorIndicator(label: 'GPS', active: _sensorStatuses['gps'] == SensorAvailability.available),
-                      Text(
-                        'Accuracy: ±${_gpsAccuracy.toStringAsFixed(1)}m',
-                        style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                      ),
-                    ],
+                ),
+                const SizedBox(height: 10),
+                // ── Live Logs Console ──
+                Container(
+                  height: 110,
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.8),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
                   ),
-                ],
-              ),
+                  child: _consoleLogs.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'Awaiting sensor streams...',
+                            style: TextStyle(color: Color(0xFF64748B), fontFamily: 'Courier', fontSize: 10),
+                          ),
+                        )
+                      : ListView.builder(
+                          padding: EdgeInsets.zero,
+                          itemCount: _consoleLogs.length,
+                          itemBuilder: (context, index) {
+                            // Render in reverse chronological order
+                            final logMsg = _consoleLogs[_consoleLogs.length - 1 - index];
+                            Color logColor = const Color(0xFF38BDF8); // default blue info
+                            if (logMsg.contains('Error')) {
+                              logColor = const Color(0xFFF87171); // red error
+                            } else if (logMsg.contains('IMU:')) {
+                              logColor = const Color(0xFFFBBF24); // amber vibration
+                            } else if (logMsg.contains('AI:')) {
+                              logColor = const Color(0xFFF472B6); // pink visual
+                            } else if (logMsg.contains('Link:')) {
+                              logColor = const Color(0xFF34D399); // green correlation
+                            } else if (logMsg.contains('Draft:')) {
+                              logColor = const Color(0xFF818CF8); // purple save
+                            }
+                            return Padding(
+                              padding: const EdgeInsets.symmetric(vertical: 2),
+                              child: Text(
+                                logMsg,
+                                style: TextStyle(
+                                  color: logColor,
+                                  fontFamily: 'Courier',
+                                  fontSize: 10,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
             ),
           ),
 
