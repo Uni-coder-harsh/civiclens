@@ -124,23 +124,10 @@ class SyncController extends AsyncNotifier<SyncSummaryState> {
     // Critical items first, then FIFO
     final sorted = _sortBySeverity(drafts);
 
-    // Batch upload via InfrastructureApi.syncPendingDrafts
-    try {
-      final api = ref.read(apiClientProvider);
-      final responses = await api.syncPendingDrafts(sorted);
-      final dao = _buildDao();
-
-      for (var i = 0; i < responses.length && i < sorted.length; i++) {
-        final draftId = sorted[i].id;
-        final response = responses[i];
-        await dao.markSynced(draftId, response.reportId);
-        _retryAttempts.remove(draftId);
-      }
-    } catch (e) {
-      // Fall back to individual uploads with per-draft back-off
-      for (final draft in sorted) {
-        await _uploadDraft(draft.id);
-      }
+    // Sync each draft individually to upload image files to Supabase S3 storage,
+    // persist records in PostgreSQL, and write database audit logs correctly.
+    for (final draft in sorted) {
+      await _uploadDraft(draft.id);
     }
 
     _isSyncing = false;
