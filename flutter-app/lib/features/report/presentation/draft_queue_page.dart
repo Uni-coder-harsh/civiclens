@@ -83,9 +83,24 @@ class _DraftQueuePageState extends ConsumerState<DraftQueuePage> {
                         : Padding(
                             padding: const EdgeInsets.only(right: 8),
                             child: TextButton.icon(
-                              onPressed: () => ref
-                                  .read(syncControllerProvider.notifier)
-                                  .syncAll(),
+                              onPressed: () async {
+                                final count = await ref
+                                    .read(syncControllerProvider.notifier)
+                                    .syncAll();
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        count > 0
+                                            ? 'Sync complete: fetched $count account report(s) from server database.'
+                                            : 'Sync complete: all account reports are up to date.',
+                                      ),
+                                      backgroundColor: const Color(0xFF10B981),
+                                      duration: const Duration(seconds: 2),
+                                    ),
+                                  );
+                                }
+                              },
                               icon: const Icon(
                                 Icons.cloud_sync_rounded,
                                 color: Color(0xFF818CF8),

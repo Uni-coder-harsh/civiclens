@@ -79,9 +79,9 @@ class SyncController extends AsyncNotifier<SyncSummaryState> {
   // ── Public API ────────────────────────────────────────────────────────────
 
   /// Forces an immediate retry of all pending and failed drafts.
-  Future<void> syncAll() async {
-    if (_isSyncing) return;
-    await _runSync();
+  Future<int> syncAll() async {
+    if (_isSyncing) return 0;
+    return await _runSync();
   }
 
   /// Resets a specific draft from `failed` → `pending` and initiates upload.
@@ -108,8 +108,8 @@ class SyncController extends AsyncNotifier<SyncSummaryState> {
 
   // ── Core Sync Logic ───────────────────────────────────────────────────────
 
-  Future<void> _runSync() async {
-    if (_isSyncing) return;
+  Future<int> _runSync() async {
+    if (_isSyncing) return 0;
     _isSyncing = true;
     _updateState(isSyncing: true);
 
@@ -130,15 +130,17 @@ class SyncController extends AsyncNotifier<SyncSummaryState> {
       }
     }
 
+    int count = 0;
     // Fetch remote reports for the user from Neon DB server
     try {
       final session = ref.read(authSessionProvider);
-      await repo.fetchAndCacheUserReports(session.userId);
+      count = await repo.fetchAndCacheUserReports(session.userId);
     } catch (_) {}
 
     _isSyncing = false;
     // All drafts processed; clear counts
     _updateState(isSyncing: false, pendingCount: 0, uploadingCount: 0);
+    return count;
   }
 
   Future<void> _uploadDraft(String draftId) async {

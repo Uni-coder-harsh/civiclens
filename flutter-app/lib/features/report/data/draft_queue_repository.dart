@@ -162,14 +162,14 @@ class DraftQueueRepository {
   }
 
   /// Fetches reports submitted by [userId] from Neon DB server and upserts them locally so they appear in Activity Page
-  Future<void> fetchAndCacheUserReports(String userId) async {
+  Future<int> fetchAndCacheUserReports(String userId) async {
     try {
       final remoteReports = await _api.fetchMyReports(userId);
       for (final r in remoteReports) {
         final companion = ReportDraftsCompanion.insert(
           id: r.reportId,
           userId: userId,
-          category: 'infrastructure',
+          category: r.aiLabel ?? 'infrastructure',
           severity: 'medium',
           description: 'Submitted Report (${r.status.name})',
           latitude: 0.0,
@@ -188,7 +188,10 @@ class DraftQueueRepository {
         );
         await _dao.insertSyncedDraft(companion);
       }
-    } catch (_) {}
+      return remoteReports.length;
+    } catch (_) {
+      return 0;
+    }
   }
 
   // ── Internal ──────────────────────────────────────────────────────────────
