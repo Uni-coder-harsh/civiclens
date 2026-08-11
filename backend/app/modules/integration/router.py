@@ -449,13 +449,14 @@ async def upload_infrastructure_report(request: Request, db: AsyncSession = Depe
         except Exception:
             pass
             
+        now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
         inspection = Inspection(
             id=uuid.uuid4(),
             asset_id=asset.id,
             inspector_id=inspector_id,
-            scheduled_at=datetime.now(timezone.utc),
-            started_at=datetime.now(timezone.utc),
-            completed_at=datetime.now(timezone.utc),
+            scheduled_at=now_naive,
+            started_at=now_naive,
+            completed_at=now_naive,
             status="COMPLETED"
         )
         db.add(inspection)
@@ -1007,14 +1008,14 @@ async def fetch_my_reports(
 
         # Automatically claim guest / unlinked / demo-user reports for this user_id if logged in
         try:
-            target_user_uuid = uuid.UUID(user_id)
+            target_user_str = str(user_id)
             for r in all_reports:
                 if r.is_guest or r.user_id is None or str(r.user_id) == "demo-user":
-                    r.user_id = target_user_uuid
+                    r.user_id = target_user_str
                     r.is_guest = False
             await db.flush()
-        except Exception:
-            pass
+        except Exception as claim_err:
+            logger.warning(f"[Reports] Claim guest reports note: {claim_err}")
 
         # Always return all reports so that even after app reinstallations, device switches, or guest logins,
         # all database reports are fetched and displayed on the user's Activity Page.
