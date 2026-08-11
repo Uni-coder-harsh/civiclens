@@ -233,7 +233,7 @@ class _DraftQueuePageState extends ConsumerState<DraftQueuePage> {
               } else if (_selectedFilter == 'synced') {
                 filteredItems = items.where((d) => d.syncState == SyncState.synced).toList();
               } else if (_selectedFilter == 'completed') {
-                filteredItems = items.where((d) => d.payload.severity?.toLowerCase() == 'low' || (d.syncState == SyncState.synced && d.payload.category != null)).toList();
+                filteredItems = items.where((d) => d.payload.severity == ReportSeverity.low || d.syncState == SyncState.synced).toList();
               }
 
               if (filteredItems.isEmpty) {
