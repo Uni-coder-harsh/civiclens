@@ -132,41 +132,46 @@ class ReportsRepository:
         except Exception:
             return
 
-        stmt = select(InfrastructurePassport).where(InfrastructurePassport.asset_id == infra_uuid)
-        res = await self.db.execute(stmt)
-        passport = res.scalar_one_or_none()
+        now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
 
-        # Severity penalties
-        penalties = {"critical": 15.0, "high": 10.0, "medium": 5.0, "low": 2.0}
-        penalty = Decimal(str(penalties.get(severity.lower(), 5.0)))
+        try:
+            stmt = select(InfrastructurePassport).where(InfrastructurePassport.asset_id == infra_uuid)
+            res = await self.db.execute(stmt)
+            passport = res.scalar_one_or_none()
 
-        if not passport:
-            new_health = Decimal("100.00") - penalty
-            passport = InfrastructurePassport(
+            # Severity penalties
+            penalties = {"critical": 15.0, "high": 10.0, "medium": 5.0, "low": 2.0}
+            penalty = Decimal(str(penalties.get(severity.lower(), 5.0)))
+
+            if not passport:
+                new_health = Decimal("100.00") - penalty
+                passport = InfrastructurePassport(
+                    id=uuid.uuid4(),
+                    asset_id=infra_uuid,
+                    passport_number=f"CL-{str(infra_uuid)[:8].upper()}",
+                    structural_health_index=max(Decimal("0.00"), new_health),
+                    degradation_rate=Decimal("2.50"),
+                    last_inspected_at=now_naive,
+                )
+                self.db.add(passport)
+                await self.db.flush()
+                logger.info(f"[Passport] 📜 Initialized new Infrastructure Passport id={passport.id} num={passport.passport_number}")
+            else:
+                passport.structural_health_index = max(Decimal("0.00"), passport.structural_health_index - penalty)
+                passport.last_inspected_at = now_naive
+                passport.degradation_rate += Decimal("0.50")
+                logger.info(f"[Passport] 📜 Updated Passport id={passport.id} health={passport.structural_health_index}")
+
+            history_entry = AssetDegradationHistory(
                 id=uuid.uuid4(),
-                asset_id=infra_uuid,
-                passport_number=f"CL-{str(infra_uuid)[:8].upper()}",
-                structural_health_index=max(Decimal("0.00"), new_health),
-                degradation_rate=Decimal("2.50"),
-                last_inspected_at=datetime.now(timezone.utc),
+                passport_id=passport.id,
+                health_index=passport.structural_health_index,
+                change_reason=f"Reported defect: {category} ({severity} severity)",
             )
-            self.db.add(passport)
+            self.db.add(history_entry)
             await self.db.flush()
-            logger.info(f"[Passport] 📜 Initialized new Infrastructure Passport id={passport.id} num={passport.passport_number}")
-        else:
-            passport.structural_health_index = max(Decimal("0.00"), passport.structural_health_index - penalty)
-            passport.last_inspected_at = datetime.now(timezone.utc)
-            passport.degradation_rate += Decimal("0.50")
-            logger.info(f"[Passport] 📜 Updated Passport id={passport.id} health={passport.structural_health_index}")
-
-        history_entry = AssetDegradationHistory(
-            id=uuid.uuid4(),
-            passport_id=passport.id,
-            health_index=passport.structural_health_index,
-            change_reason=f"Reported defect: {category} ({severity} severity)",
-        )
-        self.db.add(history_entry)
-        await self.db.flush()
+        except Exception as e:
+            logger.warning(f"[Passport] Failed to sync infrastructure passport: {e}")
 
     async def get_by_client_id(self, client_id: str) -> CivicReport | None:
         result = await self.db.execute(
