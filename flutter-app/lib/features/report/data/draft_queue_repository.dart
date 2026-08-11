@@ -169,7 +169,7 @@ class DraftQueueRepository {
         final companion = ReportDraftsCompanion.insert(
           id: r.reportId,
           userId: userId,
-          category: r.aiLabel ?? 'infrastructure',
+          category: r.aiLabel ?? 'pothole',
           severity: 'medium',
           description: 'Submitted Report (${r.status.name})',
           latitude: 0.0,
@@ -180,7 +180,7 @@ class DraftQueueRepository {
           speedMps: 0.0,
           capturedAtUtc: r.createdAtUtc,
           imagePath: '',
-          qualityGate: 'passed',
+          qualityGate: 'ok',
           isGuest: false,
           syncState: 'synced',
           createdAtUtc: r.createdAtUtc,
@@ -196,12 +196,33 @@ class DraftQueueRepository {
 
   // ── Internal ──────────────────────────────────────────────────────────────
 
+  ReportCategory _parseCategory(String name) {
+    return ReportCategory.values.firstWhere(
+      (c) => c.name.toLowerCase() == name.toLowerCase() || name.toLowerCase().contains(c.name.toLowerCase()),
+      orElse: () => ReportCategory.pothole,
+    );
+  }
+
+  ReportSeverity _parseSeverity(String name) {
+    return ReportSeverity.values.firstWhere(
+      (s) => s.name.toLowerCase() == name.toLowerCase(),
+      orElse: () => ReportSeverity.medium,
+    );
+  }
+
+  ImageQualityGate _parseQualityGate(String name) {
+    return ImageQualityGate.values.firstWhere(
+      (q) => q.name.toLowerCase() == name.toLowerCase(),
+      orElse: () => ImageQualityGate.ok,
+    );
+  }
+
   ReportPayload _rowToPayload(ReportDraft row) {
     return ReportPayload(
       id: row.id,
       userId: row.userId,
-      category: ReportCategory.values.byName(row.category),
-      severity: ReportSeverity.values.byName(row.severity),
+      category: _parseCategory(row.category),
+      severity: _parseSeverity(row.severity),
       description: row.description,
       capture: GeoCapture(
         latitude: row.latitude,
@@ -216,7 +237,7 @@ class DraftQueueRepository {
       thumbnailPath: row.thumbnailPath,
       contractorId: row.contractorId,
       infrastructureId: row.infrastructureId,
-      qualityGate: ImageQualityGate.values.byName(row.qualityGate),
+      qualityGate: _parseQualityGate(row.qualityGate),
       isGuest: row.isGuest,
       sensorData: row.sensorData,
     );
