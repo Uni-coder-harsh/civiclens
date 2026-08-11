@@ -270,36 +270,47 @@ class ReportResponse {
       };
 
   factory ReportResponse.fromJson(Map<String, dynamic> json) => ReportResponse(
-        reportId: json['report_id'] as String,
+        reportId: (json['report_id'] ?? json['id'] ?? '').toString(),
         status: DefectStatus.values.firstWhere(
           (s) => s.name.toLowerCase() == (json['status'] as String? ?? '').toLowerCase(),
           orElse: () => DefectStatus.submitted,
         ),
-        aiConfidence: (json['ai_confidence'] as num?)?.toString(),
-        aiLabel: json['ai_label'] as String?,
-        assignedContractorId: json['assigned_contractor_id'] as String?,
-        civicScoreDelta: (json['civic_score_delta'] as num?)?.toInt() ?? 0,
-        createdAtUtc: DateTime.parse(
-            (json['created_at_utc'] ?? json['created_at']) as String),
-        slaClock: json['sla_clock'] != null
+        aiConfidence: json['ai_confidence']?.toString(),
+        aiLabel: json['ai_label']?.toString(),
+        assignedContractorId: json['assigned_contractor_id']?.toString(),
+        civicScoreDelta: json['civic_score_delta'] is num
+            ? (json['civic_score_delta'] as num).toInt()
+            : int.tryParse(json['civic_score_delta']?.toString() ?? '') ?? 10,
+        createdAtUtc: json['created_at_utc'] != null || json['created_at'] != null
+            ? DateTime.tryParse((json['created_at_utc'] ?? json['created_at']).toString())?.toUtc() ?? DateTime.now().toUtc()
+            : DateTime.now().toUtc(),
+        slaClock: json['sla_clock'] != null && json['sla_clock'] is Map<String, dynamic>
             ? SlaClock.fromJson(json['sla_clock'] as Map<String, dynamic>)
             : null,
-        latitude: (json['latitude'] as num?)?.toDouble(),
-        longitude: (json['longitude'] as num?)?.toDouble(),
-        category: json['category'] as String?,
-        severity: json['severity'] as String?,
-        description: json['description'] as String?,
-        imageUrl: json['image_url'] as String?,
-        infrastructureId: json['infrastructure_id'] as String?,
-        address: json['address'] as String?,
-        passportNumber: json['passport_number'] as String?,
-        structuralHealthIndex: (json['structural_health_index'] as num?)?.toDouble(),
-        contractorName: json['contractor_name'] as String?,
-        contractorRole: json['contractor_role'] as String?,
-        authority: json['authority'] as String?,
-        tenderId: json['tender_id'] as String?,
-        verificationStatus: json['verification_status'] as String?,
-        confidenceScore: (json['confidence_score'] as num?)?.toDouble(),
-        identityNote: json['identity_note'] as String?,
+        latitude: json['latitude'] is num
+            ? (json['latitude'] as num).toDouble()
+            : double.tryParse(json['latitude']?.toString() ?? ''),
+        longitude: json['longitude'] is num
+            ? (json['longitude'] as num).toDouble()
+            : double.tryParse(json['longitude']?.toString() ?? ''),
+        category: json['category']?.toString(),
+        severity: json['severity']?.toString(),
+        description: json['description']?.toString(),
+        imageUrl: json['image_url']?.toString(),
+        infrastructureId: json['infrastructure_id']?.toString(),
+        address: json['address']?.toString(),
+        passportNumber: json['passport_number']?.toString(),
+        structuralHealthIndex: json['structural_health_index'] is num
+            ? (json['structural_health_index'] as num).toDouble()
+            : double.tryParse(json['structural_health_index']?.toString() ?? ''),
+        contractorName: json['contractor_name']?.toString(),
+        contractorRole: json['contractor_role']?.toString(),
+        authority: json['authority']?.toString(),
+        tenderId: json['tender_id']?.toString(),
+        verificationStatus: json['verification_status']?.toString(),
+        confidenceScore: json['confidence_score'] is num
+            ? (json['confidence_score'] as num).toDouble()
+            : double.tryParse(json['confidence_score']?.toString() ?? ''),
+        identityNote: json['identity_note']?.toString(),
       );
 }

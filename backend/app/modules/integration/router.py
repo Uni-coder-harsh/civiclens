@@ -497,8 +497,23 @@ async def upload_infrastructure_report(request: Request, db: AsyncSession = Depe
         # 5.5. Create CivicReport record for user activity page queries
         try:
             from app.modules.reports.model import CivicReport
+            
+            report_uuid = None
+            try:
+                report_uuid = uuid.UUID(payload.id)
+            except Exception:
+                report_uuid = uuid.uuid4()
+
+            captured_dt = None
+            if payload.capture and payload.capture.captured_at:
+                try:
+                    dt_str = str(payload.capture.captured_at).replace("Z", "+00:00")
+                    captured_dt = datetime.fromisoformat(dt_str)
+                except Exception:
+                    captured_dt = datetime.now(timezone.utc)
+
             civic_rep = CivicReport(
-                id=uuid.UUID(payload.id) if len(payload.id) == 36 else uuid.uuid4(),
+                id=report_uuid,
                 client_id=payload.id,
                 user_id=str(payload.user_id),
                 is_guest=payload.is_guest,
@@ -511,6 +526,7 @@ async def upload_infrastructure_report(request: Request, db: AsyncSession = Depe
                 accuracy_m=payload.capture.accuracy_m,
                 bearing_deg=payload.capture.bearing_deg,
                 speed_mps=payload.capture.speed_mps,
+                captured_at=captured_dt,
                 image_url=image_url,
                 thumbnail_url=image_url,
                 quality_gate=payload.quality_gate or "ok",
@@ -522,8 +538,10 @@ async def upload_infrastructure_report(request: Request, db: AsyncSession = Depe
                 civic_score_delta=10
             )
             db.add(civic_rep)
+            await db.flush()
         except Exception as cr_err:
-            logger.warning(f"[REPORT UPLOAD] CivicReport record creation note: {cr_err}")
+            logger.error(f"[REPORT UPLOAD] Critical CivicReport creation error: {cr_err}")
+            raise
 
         audit = AuditLog(
             id=uuid.uuid4(),
