@@ -26,11 +26,27 @@ class ReportsRepository:
                 data.capture.longitude,
             )
 
-        # ── Infrastructure Passport Automatic Update & Degradation Log ──────
+        # ── Infrastructure Passport & Identity Discovery Pipeline ──────────
         try:
             await self._update_or_create_infrastructure_passport(infra_id, data.category, data.severity)
+
+            from app.modules.infrastructure_identity.service import identity_service
+            from app.modules.infrastructure_identity.schema import CoordinateLookupRequest
+
+            lookup_req = CoordinateLookupRequest(
+                latitude=data.capture.latitude,
+                longitude=data.capture.longitude,
+                accuracy_m=data.capture.accuracy_m,
+                altitude_m=data.capture.altitude_m,
+                type_hint=data.category.upper(),
+                sync_government_search=True,
+            )
+            id_response = await identity_service.lookup_identity(lookup_req)
+            await identity_service.persist_identity_and_update_passport(
+                self.db, id_response, asset_id_str=infra_id, report_id=str(data.id)
+            )
         except Exception as p_err:
-            logger.warning(f"[Reports] Passport update note: {p_err}")
+            logger.warning(f"[Reports] Passport and identity update note: {p_err}")
 
         report = CivicReport(
             id=uuid.UUID(data.id) if self._is_uuid(data.id) else uuid.uuid4(),

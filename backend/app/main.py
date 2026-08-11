@@ -24,6 +24,7 @@ from app.modules.notifications.router import router as notifications_router
 from app.modules.analytics.router import router as analytics_router
 from app.modules.integration.router import router as integration_router
 from app.modules.reports.router import router as reports_router
+from app.modules.infrastructure_identity.router import router as identity_router
 
 # Import ORM models so SQLAlchemy metadata and string relationships are registered.
 from app.modules.auth import model as auth_models  # noqa: F401
@@ -37,6 +38,7 @@ from app.modules.notifications import model as notification_models  # noqa: F401
 from app.modules.analytics import model as analytics_models  # noqa: F401
 from app.modules.system import model as system_models  # noqa: F401
 from app.modules.reports import model as report_models  # noqa: F401
+from app.modules.infrastructure_identity import model as identity_models  # noqa: F401
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -101,6 +103,7 @@ app.include_router(notifications_router, prefix=api_prefix)
 app.include_router(analytics_router, prefix=api_prefix)
 app.include_router(integration_router)
 app.include_router(reports_router, prefix=api_prefix)
+app.include_router(identity_router, prefix=api_prefix)
 
 # Mount local static file storage for fallback image serving
 import os
