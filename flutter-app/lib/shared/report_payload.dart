@@ -195,6 +195,16 @@ class ReportResponse {
   final int civicScoreDelta;
   final DateTime createdAtUtc;
   final SlaClock? slaClock;
+  final double? latitude;
+  final double? longitude;
+  final String? category;
+  final String? severity;
+  final String? description;
+  final String? imageUrl;
+  final String? infrastructureId;
+  final String? address;
+  final String? passportNumber;
+  final double? structuralHealthIndex;
 
   const ReportResponse({
     required this.reportId,
@@ -205,6 +215,16 @@ class ReportResponse {
     required this.civicScoreDelta,
     required this.createdAtUtc,
     this.slaClock,
+    this.latitude,
+    this.longitude,
+    this.category,
+    this.severity,
+    this.description,
+    this.imageUrl,
+    this.infrastructureId,
+    this.address,
+    this.passportNumber,
+    this.structuralHealthIndex,
   });
 
   Map<String, dynamic> toJson() => {
@@ -216,11 +236,24 @@ class ReportResponse {
         'civic_score_delta': civicScoreDelta,
         'created_at': createdAtUtc.toUtc().toIso8601String(),
         'sla_clock': slaClock?.toJson(),
+        'latitude': latitude,
+        'longitude': longitude,
+        'category': category,
+        'severity': severity,
+        'description': description,
+        'image_url': imageUrl,
+        'infrastructure_id': infrastructureId,
+        'address': address,
+        'passport_number': passportNumber,
+        'structural_health_index': structuralHealthIndex,
       };
 
   factory ReportResponse.fromJson(Map<String, dynamic> json) => ReportResponse(
         reportId: json['report_id'] as String,
-        status: DefectStatus.values.byName(json['status'] as String),
+        status: DefectStatus.values.firstWhere(
+          (s) => s.name.toLowerCase() == (json['status'] as String? ?? '').toLowerCase(),
+          orElse: () => DefectStatus.submitted,
+        ),
         aiConfidence: (json['ai_confidence'] as num?)?.toString(),
         aiLabel: json['ai_label'] as String?,
         assignedContractorId: json['assigned_contractor_id'] as String?,
@@ -230,5 +263,15 @@ class ReportResponse {
         slaClock: json['sla_clock'] != null
             ? SlaClock.fromJson(json['sla_clock'] as Map<String, dynamic>)
             : null,
+        latitude: (json['latitude'] as num?)?.toDouble(),
+        longitude: (json['longitude'] as num?)?.toDouble(),
+        category: json['category'] as String?,
+        severity: json['severity'] as String?,
+        description: json['description'] as String?,
+        imageUrl: json['image_url'] as String?,
+        infrastructureId: json['infrastructure_id'] as String?,
+        address: json['address'] as String?,
+        passportNumber: json['passport_number'] as String?,
+        structuralHealthIndex: (json['structural_health_index'] as num?)?.toDouble(),
       );
 }

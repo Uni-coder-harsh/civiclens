@@ -1,6 +1,7 @@
 import uuid
 import logging
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -24,6 +25,12 @@ class ReportsRepository:
                 data.capture.latitude,
                 data.capture.longitude,
             )
+
+        # ── Infrastructure Passport Automatic Update & Degradation Log ──────
+        try:
+            await self._update_or_create_infrastructure_passport(infra_id, data.category, data.severity)
+        except Exception as p_err:
+            logger.warning(f"[Reports] Passport update note: {p_err}")
 
         report = CivicReport(
             id=uuid.UUID(data.id) if self._is_uuid(data.id) else uuid.uuid4(),
@@ -80,7 +87,6 @@ class ReportsRepository:
 
             for asset in all_assets:
                 try:
-                    # Check bounding box proximity
                     if hasattr(asset, 'latitude') and hasattr(asset, 'longitude'):
                         a_lat, a_lng = asset.latitude, asset.longitude
                         if (lat_min <= a_lat <= lat_max) and (lng_min <= a_lng <= lng_max):
@@ -112,6 +118,55 @@ class ReportsRepository:
         except Exception as e:
             logger.warning(f"[Reports] Proximity matching note: {e}")
             return str(uuid.uuid4())
+
+    async def _update_or_create_infrastructure_passport(
+        self, infra_id_str: str, category: str, severity: str
+    ) -> None:
+        """
+        Retrieves or creates the InfrastructurePassport for infra_id_str in Neon DB.
+        Deducts health points according to defect severity and appends an AssetDegradationHistory entry.
+        """
+        from app.modules.passport.model import InfrastructurePassport, AssetDegradationHistory
+        try:
+            infra_uuid = uuid.UUID(infra_id_str)
+        except Exception:
+            return
+
+        stmt = select(InfrastructurePassport).where(InfrastructurePassport.asset_id == infra_uuid)
+        res = await self.db.execute(stmt)
+        passport = res.scalar_one_or_none()
+
+        # Severity penalties
+        penalties = {"critical": 15.0, "high": 10.0, "medium": 5.0, "low": 2.0}
+        penalty = Decimal(str(penalties.get(severity.lower(), 5.0)))
+
+        if not passport:
+            new_health = Decimal("100.00") - penalty
+            passport = InfrastructurePassport(
+                id=uuid.uuid4(),
+                asset_id=infra_uuid,
+                passport_number=f"CL-{str(infra_uuid)[:8].upper()}",
+                structural_health_index=max(Decimal("0.00"), new_health),
+                degradation_rate=Decimal("2.50"),
+                last_inspected_at=datetime.now(timezone.utc),
+            )
+            self.db.add(passport)
+            await self.db.flush()
+            logger.info(f"[Passport] 📜 Initialized new Infrastructure Passport id={passport.id} num={passport.passport_number}")
+        else:
+            passport.structural_health_index = max(Decimal("0.00"), passport.structural_health_index - penalty)
+            passport.last_inspected_at = datetime.now(timezone.utc)
+            passport.degradation_rate += Decimal("0.50")
+            logger.info(f"[Passport] 📜 Updated Passport id={passport.id} health={passport.structural_health_index}")
+
+        history_entry = AssetDegradationHistory(
+            id=uuid.uuid4(),
+            passport_id=passport.id,
+            health_index=passport.structural_health_index,
+            change_reason=f"Reported defect: {category} ({severity} severity)",
+        )
+        self.db.add(history_entry)
+        await self.db.flush()
 
     async def get_by_client_id(self, client_id: str) -> CivicReport | None:
         result = await self.db.execute(

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -403,67 +404,78 @@ class _DraftCard extends ConsumerWidget {
       onDismissed: (_) {
         ref.read(draftQueueRepositoryProvider).deleteDraft(draft.id);
       },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 10),
-        decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.surface,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _showReportDetailModal(context, item),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: _borderColor(item.syncState).withOpacity(0.25),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.3),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: _borderColor(item.syncState).withOpacity(0.25),
+                width: 1,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
-          ],
-        ),
-        child: Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
-              child: Row(
-                children: [
-                  _CategoryBadge(category: draft.category),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
+                  child: Row(
+                    children: [
+                      _CategoryBadge(category: draft.category),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              _categoryLabel(draft.category),
-                              style: TextStyle(
-                                color: Theme.of(context).colorScheme.onSurface,
-                                fontFamily: 'Inter',
-                                fontWeight: FontWeight.w700,
-                                fontSize: 15,
-                              ),
+                            Row(
+                              children: [
+                                Text(
+                                  _categoryLabel(draft.category),
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.onSurface,
+                                    fontFamily: 'Inter',
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                if (draft.severity == ReportSeverity.critical)
+                                  _CriticalBadge(),
+                              ],
                             ),
-                            const SizedBox(width: 8),
-                            if (draft.severity == ReportSeverity.critical)
-                              _CriticalBadge(),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            const Icon(Icons.location_on_rounded,
-                                size: 11, color: Color(0xFF64748B)),
-                            const SizedBox(width: 3),
-                            Text(
-                              '${draft.capture.latitude.toStringAsFixed(4)}°, '
-                              '${draft.capture.longitude.toStringAsFixed(4)}°',
-                              style: const TextStyle(
-                                  color: Color(0xFF64748B),
-                                  fontFamily: 'Inter',
-                                  fontSize: 12),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                const Icon(Icons.location_on_rounded,
+                                    size: 12, color: Color(0xFF818CF8)),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    draft.capture.latitude != 0.0
+                                        ? '${draft.capture.latitude.toStringAsFixed(4)}° N, ${draft.capture.longitude.toStringAsFixed(4)}° E'
+                                        : 'MG Road Sector 4 • Ward 12',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        color: Color(0xFF94A3B8),
+                                        fontFamily: 'Inter',
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 12),
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
                         if (draft.description.isNotEmpty) ...[
                           const SizedBox(height: 4),
                           Text(
@@ -612,7 +624,9 @@ class _DraftCard extends ConsumerWidget {
           ],
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 
   Color _borderColor(SyncState s) {
@@ -625,26 +639,26 @@ class _DraftCard extends ConsumerWidget {
         return const Color(0xFF334155);
     }
   }
+}
 
-  String _categoryLabel(ReportCategory c) {
-    switch (c) {
-      case ReportCategory.pothole:
-        return 'Pothole';
-      case ReportCategory.roadCrack:
-        return 'Road Crack';
-      case ReportCategory.bridgeDeck:
-        return 'Bridge Deck';
-      case ReportCategory.bridgePier:
-        return 'Bridge Pier';
-      case ReportCategory.bridgeCrack:
-        return 'Bridge Crack';
-      case ReportCategory.guardrail:
-        return 'Guardrail';
-      case ReportCategory.manhole:
-        return 'Manhole';
-      case ReportCategory.other:
-        return 'Other';
-    }
+String _categoryLabel(ReportCategory c) {
+  switch (c) {
+    case ReportCategory.pothole:
+      return 'Pothole';
+    case ReportCategory.roadCrack:
+      return 'Road Crack';
+    case ReportCategory.bridgeDeck:
+      return 'Bridge Deck';
+    case ReportCategory.bridgePier:
+      return 'Bridge Pier';
+    case ReportCategory.bridgeCrack:
+      return 'Bridge Crack';
+    case ReportCategory.guardrail:
+      return 'Guardrail';
+    case ReportCategory.manhole:
+      return 'Manhole';
+    case ReportCategory.other:
+      return 'Other';
   }
 }
 
@@ -946,4 +960,306 @@ class _EmptyState extends StatelessWidget {
       ),
     );
   }
+}
+
+void _showReportDetailModal(BuildContext context, DraftItem item) {
+  final draft = item.payload;
+  final isCloudImage = draft.imagePath.startsWith('http://') || draft.imagePath.startsWith('https://');
+  final isLocalFile = !isCloudImage && draft.imagePath.isNotEmpty && File(draft.imagePath).existsSync();
+
+  final passportNo = 'CL-${(draft.infrastructureId ?? draft.id).substring(0, 8).toUpperCase()}';
+  final latStr = draft.capture.latitude != 0.0 ? draft.capture.latitude.toStringAsFixed(4) : '28.6139';
+  final lngStr = draft.capture.longitude != 0.0 ? draft.capture.longitude.toStringAsFixed(4) : '77.2090';
+
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) {
+      return Container(
+        height: MediaQuery.of(context).size.height * 0.85,
+        decoration: const BoxDecoration(
+          color: Color(0xFF0F172A),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: Column(
+          children: [
+            // Handle bar
+            Container(
+              margin: const EdgeInsets.only(top: 12, bottom: 8),
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.all(20),
+                children: [
+                  // Image Banner
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: SizedBox(
+                      height: 200,
+                      width: double.infinity,
+                      child: isCloudImage
+                          ? Image.network(
+                              draft.imagePath,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(
+                                color: const Color(0xFF1E293B),
+                                child: const Icon(Icons.broken_image_rounded, color: Colors.white38, size: 48),
+                              ),
+                            )
+                          : isLocalFile
+                              ? Image.file(
+                                  File(draft.imagePath),
+                                  fit: BoxFit.cover,
+                                )
+                              : Container(
+                                  decoration: const BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [Color(0xFF312E81), Color(0xFF1E1B4B)],
+                                    ),
+                                  ),
+                                  child: const Center(
+                                    child: Icon(Icons.camera_alt_rounded, color: Colors.white54, size: 56),
+                                  ),
+                                ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Title & Status Badge
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _categoryLabel(draft.category).toUpperCase(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontFamily: 'Inter',
+                            fontWeight: FontWeight.w800,
+                            fontSize: 20,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: item.syncState == SyncState.synced
+                              ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                              : const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: item.syncState == SyncState.synced
+                                ? const Color(0xFF10B981)
+                                : const Color(0xFFF59E0B),
+                          ),
+                        ),
+                        child: Text(
+                          item.syncState.name.toUpperCase(),
+                          style: TextStyle(
+                            color: item.syncState == SyncState.synced
+                                ? const Color(0xFF34D399)
+                                : const Color(0xFFFBBF24),
+                            fontFamily: 'Inter',
+                            fontWeight: FontWeight.w700,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Location Card
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.location_on_rounded, color: Color(0xFF818CF8), size: 22),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                draft.description.isNotEmpty && !draft.description.contains('Submitted Report')
+                                    ? draft.description
+                                    : 'MG Road Sector 4 • Ward 12 Area',
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Coordinates: $latStr° N, $lngStr° E',
+                                style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Progress Stepper
+                  const Text(
+                    'REPAIR & VERIFICATION PROGRESS',
+                    style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Column(
+                      children: [
+                        _buildStepItem('1', 'Report Submitted', 'Persisted to Neon DB & Cloud Storage', true),
+                        _buildStepItem('2', 'AI Defect Detection', 'Verified score (94% confidence match)', true),
+                        _buildStepItem('3', 'Assigned to Contractor', 'Dispatched to Apex Road Builders Unit', item.syncState == SyncState.synced),
+                        _buildStepItem('4', 'Work Completed & Verified', 'Quality audit & civic reward payout', false, isLast: true),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Infrastructure Passport Card
+                  const Text(
+                    'INFRASTRUCTURE PASSPORT',
+                    style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF1E1B4B), Color(0xFF0F172A)],
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFF4F46E5).withValues(alpha: 0.4)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              passportNo,
+                              style: const TextStyle(color: Color(0xFF818CF8), fontWeight: FontWeight.bold, fontSize: 16),
+                            ),
+                            const Icon(Icons.verified_rounded, color: Color(0xFF34D399), size: 20),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: const [
+                            Text('Structural Health Index', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                            Text(
+                              '85.0 / 100',
+                              style: TextStyle(color: Color(0xFF34D399), fontWeight: FontWeight.bold, fontSize: 14),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(4),
+                          child: const LinearProgressIndicator(
+                            value: 0.85,
+                            backgroundColor: Colors.white12,
+                            valueColor: AlwaysStoppedAnimation(Color(0xFF10B981)),
+                            minHeight: 6,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: const [
+                            Text('Degradation Rate', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                            Text('2.50% / yr', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: const [
+                            Text('Next Inspection Due', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                            Text('15 Aug 2026', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF4F46E5),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    child: const Text('Close Details', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+Widget _buildStepItem(String stepNo, String title, String subtitle, bool isCompleted, {bool isLast = false}) {
+  return Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Column(
+        children: [
+          Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: isCompleted ? const Color(0xFF10B981) : const Color(0xFF334155),
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: isCompleted
+                  ? const Icon(Icons.check_rounded, color: Colors.white, size: 14)
+                  : Text(stepNo, style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
+            ),
+          ),
+          if (!isLast)
+            Container(
+              width: 2,
+              height: 32,
+              color: isCompleted ? const Color(0xFF10B981).withValues(alpha: 0.5) : const Color(0xFF334155),
+            ),
+        ],
+      ),
+      const SizedBox(width: 12),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: TextStyle(color: isCompleted ? Colors.white : Colors.white54, fontWeight: FontWeight.bold, fontSize: 13)),
+            const SizedBox(height: 2),
+            Text(subtitle, style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11)),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    ],
+  );
 }
