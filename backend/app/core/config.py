@@ -48,6 +48,14 @@ class Settings(BaseSettings):
     # CORS Configs
     ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 
+    # AI / ONNX Model Configuration
+    MODEL_PATH: str = "ml-engine/best.onnx"
+    MODEL_VERSION: str = "crack-detector-v1"
+    MODEL_INPUT_SIZE: int = 640
+    MODEL_CONFIDENCE_THRESHOLD: float = 0.25
+    MODEL_IOU_THRESHOLD: float = 0.45
+    MODEL_PROVIDER: str = "CPUExecutionProvider"
+
     # Rate Limiter
     RATE_LIMIT_ENABLED: bool = True
 

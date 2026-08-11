@@ -1,75 +1,122 @@
-# CivicLens ML Engine 🚀
+# CivicLens ML Engine — Inference
 
-Welcome to the **CivicLens Model Development Engine**. This repository is configured to train, evaluate, and export state-of-the-art computer vision models for road and bridge damage detection using **YOLO11**.
+Road and infrastructure defect detection using a trained YOLO11m ONNX model.
 
----
+## Structure
 
-## 📂 Repository Structure
-
-The ML Engine uses a clean, production-grade layout. The code resides entirely inside the repository, using notebooks strictly as minimal runners.
-
-```text
+```
 ml-engine/
-│
-├── configs/                  # Config files driving training/dataset definitions
-│   ├── dataset.yaml          # Dataset directories and taxonomy mappings
-│   ├── train.yaml            # Hyperparameters, batch size, epochs
-│   ├── model.yaml            # Model model family selection (YOLO11)
-│   └── augmentation.yaml     # Spatial and color space augmentations
-│
-├── notebooks/                # Notebook runners for Kaggle / Colab
-│   ├── 01_train.ipynb        # Run model training pipeline
-│   ├── 02_evaluate.ipynb     # Check performance on validation split
-│   └── 03_export.ipynb       # Export model weights to ONNX format
-│
-├── src/                      # Source code modules
-│   ├── datasets/             # Dataset loader and symlinking operations
-│   ├── preprocessing/         # Bounding box coordinates converters
-│   ├── training/             # PyTorch training loops and executors
-│   ├── evaluation/           # validation metric utilities
-│   ├── inference/            # ONNX exporting and model card compiler
-│   └── utils/                # Configuration parsing, seeding, logging
-│
-├── requirements.txt          # Python packages list
-├── taxonomy.md               # Damage class & severity specifications
-├── pipeline.md               # Pipeline architecture & data flows
-├── KAGGLE_GUIDE.md           # Instructions on how to run on Kaggle
-└── progress.md               # Project milestones and experiment logs
+├── best.onnx                  # Trained YOLO11m model (ONNX, opset 20, ~103 MB)
+├── predict.py                 # CLI tool: run inference on any local image
+├── test_onnx_inference.py     # Comprehensive automated test suite
+├── test_road.jpg              # Sample test image
+├── requirements.txt           # Inference-only dependencies
+├── outputs/                   # Annotated output images saved here
+└── src/
+    └── inference/
+        ├── __init__.py
+        └── engine.py          # CrackONNXInferenceEngine — the core inference class
 ```
 
----
+## Detected Classes
 
-## 📑 Core Documentation Contracts
+| ID | Class Name              | Description                        |
+|----|-------------------------|------------------------------------|
+| 0  | D00_Longitudinal_Crack  | Cracks running parallel to road    |
+| 1  | D10_Transverse_Crack    | Cracks perpendicular to road       |
+| 2  | D20_Alligator_Crack     | Interconnected crack network       |
+| 3  | D30_Other_Corruption    | Surface degradation, rutting, etc. |
+| 4  | D40_Pothole             | Potholes                           |
 
-Before editing code or running experiments, please align on the following three contract files:
-1. **[configs/dataset.yaml](file:///home/harsh/Desktop/CodeNova/civiclens/ml-engine/configs/dataset.yaml)**: Dictates enabled source datasets, paths, and local/remote configurations.
-2. **[taxonomy.md](file:///home/harsh/Desktop/CodeNova/civiclens/ml-engine/taxonomy.md)**: Defines the frozen list of damage classes, severity metrics, and label translations.
-3. **[pipeline.md](file:///home/harsh/Desktop/CodeNova/civiclens/ml-engine/pipeline.md)**: Details loaders, preprocessings, and export serialization protocols.
+## Model Info
 
----
+| Property        | Value                            |
+|-----------------|----------------------------------|
+| Architecture    | YOLO11m (Ultralytics)            |
+| Task            | Object Detection                 |
+| Input           | 1 × 3 × 640 × 640 (RGB float32)  |
+| Output          | 1 × 9 × 8400                     |
+| Runtime         | ONNX Runtime ≥ 1.18              |
+| ONNX Opset      | 20                               |
+| Model size      | ~103 MB                          |
 
-## 🏃 Running in Kaggle
+## CLI Usage
 
-To run this pipeline on Kaggle without transferring heavy zip files or copying thousands of lines:
-1. Mount the necessary datasets (`rdd2022`, `bridge-crack`, etc.) to `/kaggle/input/...`.
-2. Clone the repository once:
-   ```bash
-   !git clone https://github.com/Uni-coder-harsh/civiclens.git
-   ```
-3. Open **`notebooks/01_train.ipynb`** and run the cells.
-4. If you modify code locally in VS Code, push to GitHub, then run the pull cell in your Kaggle notebook:
-   ```bash
-   %cd /kaggle/working/civiclens
-   !git pull origin main
-   ```
+```bash
+# Basic detection
+python ml-engine/predict.py --image path/to/road.jpg
 
-For detailed setup instructions, see the **[Kaggle Model Training Guide](file:///home/harsh/Desktop/CodeNova/civiclens/ml-engine/KAGGLE_GUIDE.md)**.
+# With annotation output
+python ml-engine/predict.py --image path/to/road.jpg --annotate --output annotated.jpg
 
----
+# Custom thresholds
+python ml-engine/predict.py --image path/to/road.jpg --conf 0.30 --iou 0.45
 
-## 📊 Outputs
+# JSON-only output (for scripting)
+python ml-engine/predict.py --image path/to/road.jpg --json-only
+```
 
-All training outputs are automatically generated inside the `/kaggle/working/outputs/` directory:
-- **`outputs/runs/detect/yolo11m_run/`**: CSV metrics, precision-recall curves, confusion matrices, and training logs.
-- **`outputs/road_detector_v1.onnx`**: The final dynamic ONNX model ready for backend deployment.
-- **`outputs/README.md`**: The compiled model card detailing class maps and performance metrics.
+## Running the Test Suite
+
+```bash
+PYTHONPATH=ml-engine backend/.venv/bin/python3 ml-engine/test_onnx_inference.py
+```
+
+## Backend API
+
+The engine is integrated into the FastAPI backend:
+
+```
+POST /v1/prediction/detect
+Content-Type: multipart/form-data
+Authorization: Bearer <token>
+
+file=@road.jpg
+```
+
+Response:
+```json
+{
+  "status": "completed",
+  "model": { "name": "civiclens-crack-detector", "version": "crack-detector-v1", ... },
+  "image": { "width": 1920, "height": 1080 },
+  "detections": [
+    {
+      "class_id": 0,
+      "class_name": "D00_Longitudinal_Crack",
+      "confidence": 0.87,
+      "bounding_box": { "x1": 421, "y1": 183, "x2": 712, "y2": 270, "width": 291, "height": 87 }
+    }
+  ],
+  "detection_count": 1,
+  "timing_ms": { "preprocess": 15, "inference": 240, "postprocess": 2, "total": 257 }
+}
+```
+
+## Inference Pipeline
+
+```
+Image bytes (JPEG/PNG/WEBP)
+    ↓
+Pillow decode + RGB convert
+    ↓
+Letterbox resize to 640×640  (preserves aspect ratio, pads with grey 114,114,114)
+    ↓
+Normalize [0, 255] → [0.0, 1.0]
+    ↓
+HWC → CHW → add batch dim  →  [1, 3, 640, 640] float32
+    ↓
+ONNX Runtime InferenceSession.run()
+    ↓
+output0: [1, 9, 8400]  →  transpose  →  [8400, 9]
+    ↓
+Decode: cx,cy,w,h + 5 class scores per anchor
+    ↓
+Confidence threshold filter
+    ↓
+Rescale to original image coordinates
+    ↓
+Vectorized NMS (per IoU threshold)
+    ↓
+Structured detection JSON
+```

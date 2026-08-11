@@ -1,3 +1,8 @@
+"""
+CivicLens AI Module — Extended Schemas for ONNX Detection Endpoint.
+Adds detection-specific response schemas on top of the existing AI schemas.
+"""
+
 import uuid
 from decimal import Decimal
 from pydantic import Field
@@ -56,3 +61,70 @@ class InferenceResponse(BaseResponseSchema):
     inference_duration_ms: int
     status: str
     error_message: str | None = None
+
+
+# ── Detection-specific response schemas (ONNX pipeline) ──────────────────────
+
+class DetectionBoundingBox(BaseResponseSchema):
+    x1: int
+    y1: int
+    x2: int
+    y2: int
+    width: int
+    height: int
+
+
+class DetectionItem(BaseResponseSchema):
+    class_id: int
+    class_name: str
+    confidence: float
+    bounding_box: DetectionBoundingBox
+
+
+class DetectionModelInfo(BaseResponseSchema):
+    name: str
+    version: str
+    runtime: str
+    provider: str
+
+
+class DetectionImageInfo(BaseResponseSchema):
+    width: int
+    height: int
+
+
+class DetectionTimingMs(BaseResponseSchema):
+    preprocess: float
+    inference: float
+    postprocess: float
+    total: float
+
+
+class DetectionResult(BaseResponseSchema):
+    """
+    Full ONNX crack-detection result returned to Flutter and stored in DB.
+    Conforms to the CivicLens detection API contract.
+    """
+    status: str                                   # "completed" | "failed"
+    model: DetectionModelInfo
+    image: DetectionImageInfo
+    detections: list[DetectionItem]
+    detection_count: int
+    timing_ms: DetectionTimingMs
+    inference_log_id: uuid.UUID | None = None     # FK into ai_inference_logs
+    annotated_image_url: str | None = None        # Supabase/MinIO URL if generated
+    error_message: str | None = None
+
+
+class EngineDebugResponse(BaseResponseSchema):
+    """Diagnostic info about the loaded ONNX model (dev/staging only)."""
+    model_path: str
+    model_version: str
+    input_name: str
+    input_shape: list
+    output_name: str
+    output_shape: list
+    class_names: dict
+    provider: str
+    conf_threshold: float
+    iou_threshold: float
