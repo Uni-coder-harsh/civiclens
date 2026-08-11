@@ -93,6 +93,7 @@ app.add_middleware(
 
 api_prefix = "/api/v1"
 app.include_router(auth_router, prefix=api_prefix)
+app.include_router(auth_router, prefix="/v1")
 app.include_router(organizations_router, prefix=api_prefix)
 app.include_router(infrastructure_router, prefix=api_prefix)
 app.include_router(passport_router, prefix=api_prefix)
@@ -103,7 +104,9 @@ app.include_router(notifications_router, prefix=api_prefix)
 app.include_router(analytics_router, prefix=api_prefix)
 app.include_router(integration_router)
 app.include_router(reports_router, prefix=api_prefix)
+app.include_router(reports_router, prefix="/v1")
 app.include_router(identity_router, prefix=api_prefix)
+app.include_router(identity_router, prefix="/v1")
 
 # Mount local static file storage for fallback image serving
 import os

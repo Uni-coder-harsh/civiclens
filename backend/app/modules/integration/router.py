@@ -1001,12 +1001,20 @@ async def fetch_my_reports(
     logger.info(f"[Reports] Fetching user reports from DB for user_id={user_id}")
     try:
         from app.modules.reports.model import CivicReport
-        from app.modules.passport.model import InfrastructurePassport
-        from app.modules.infrastructure_identity.model import InfrastructureIdentityRecord, InfrastructureOrganizationRecord
-
         stmt = select(CivicReport).order_by(CivicReport.created_at.desc())
         res = await db.execute(stmt)
         all_reports = res.scalars().all()
+
+        # Automatically claim guest / unlinked reports for this user_id if logged in
+        try:
+            target_user_uuid = uuid.UUID(user_id)
+            for r in all_reports:
+                if r.is_guest or r.user_id is None:
+                    r.user_id = target_user_uuid
+                    r.is_guest = False
+            await db.flush()
+        except Exception:
+            pass
 
         # Always return all reports so that even after app reinstallations, device switches, or guest logins,
         # all database reports are fetched and displayed on the user's Activity Page.

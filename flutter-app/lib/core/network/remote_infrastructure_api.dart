@@ -32,14 +32,23 @@ class RemoteInfrastructureApi implements InfrastructureApi {
 
     try {
       print('[Upload] Sending report to backend, image present: $fileExists');
-      final response = await dio.post(
-        '/api/v1/reports',
-        data: formData,
-        onSendProgress: onProgress,
-      );
+      Response response;
+      try {
+        response = await dio.post(
+          '/v1/reports',
+          data: formData,
+          onSendProgress: onProgress,
+        );
+      } catch (_) {
+        response = await dio.post(
+          '/api/v1/reports',
+          data: formData,
+          onSendProgress: onProgress,
+        );
+      }
       return ReportResponse.fromJson(response.data as Map<String, dynamic>);
-    } on DioError catch (e) {
-      print('[Upload] DioError: ${e.message}');
+    } on DioException catch (e) {
+      print('[Upload] DioException: ${e.message}');
       if (e.response != null) {
         print('[Upload] Status: ${e.response?.statusCode}');
         print('[Upload] Body: ${e.response?.data}');
