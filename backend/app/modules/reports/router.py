@@ -57,6 +57,8 @@ async def get_report(
     service: ReportsService = Depends(get_reports_service),
 ):
     """Fetch a report by its server-side or client-side UUID."""
+    if report_id in ["witness-nearby", "sync", "nearby", "timeline"]:
+        raise HTTPException(status_code=404, detail="Specialized route, handled by integration service.")
     report = await service.repo.get_by_client_id(report_id)
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")

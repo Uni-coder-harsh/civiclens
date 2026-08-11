@@ -648,14 +648,45 @@ async def fetch_report_timeline(report_id: str):
     return timeline
 
 @router.get("/reports/witness-nearby", response_model=List[NearbyDefectSchema])
-async def fetch_witnessable_nearby(lat: float, lng: float, radius_m: float = 50.0):
-    results = []
-    for d in store.defects.values():
-        if d["status"] in ("submitted", "aiVerified"):
-            dist = haversine_distance(lat, lng, d["latitude"], d["longitude"])
+async def fetch_witnessable_nearby(
+    lat: float,
+    lng: float,
+    radius_m: float = 5000.0,
+    db: AsyncSession = Depends(get_db_session)
+):
+    """
+    Fetches nearby witnessable defect reports from Neon DB for peer confirmation.
+    """
+    try:
+        from app.modules.reports.model import CivicReport
+        stmt = select(CivicReport).order_by(CivicReport.created_at.desc())
+        res = await db.execute(stmt)
+        all_reports = res.scalars().all()
+
+        results = []
+        for r in all_reports:
+            dist = haversine_distance(lat, lng, r.latitude, r.longitude)
             if dist <= radius_m:
-                results.append(d)
-    return results
+                created_str = r.created_at.isoformat() if r.created_at else datetime.now(timezone.utc).isoformat()
+                results.append(
+                    NearbyDefectSchema(
+                        report_id=str(r.id),
+                        category=r.category or "pothole",
+                        severity=r.severity or "medium",
+                        description=r.description or f"Defect near Lat {r.latitude:.4f}, Lng {r.longitude:.4f}",
+                        latitude=r.latitude,
+                        longitude=r.longitude,
+                        image_url="",
+                        status="submitted",
+                        confidence=0.92,
+                        distance_meters=dist,
+                        created_at_utc=created_str
+                    )
+                )
+        return results
+    except Exception as e:
+        logger.warning(f"[Witness] Error fetching witness nearby: {e}")
+        return []
 
 @router.post("/reports/{report_id}/witness", response_model=ReportResponseSchema)
 async def submit_witness_confirmation(report_id: str, confirmation: WitnessConfirmationSchema):
