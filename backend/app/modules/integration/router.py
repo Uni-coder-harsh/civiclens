@@ -1081,24 +1081,48 @@ async def fetch_my_reports(
     logger.info(f"[Reports] Fetching user reports from DB for user_id={user_id}")
     try:
         from app.modules.reports.model import CivicReport
-        stmt = select(CivicReport).order_by(CivicReport.created_at.desc())
-        res = await db.execute(stmt)
-        all_reports = res.scalars().all()
+        from sqlalchemy import update, or_
 
-        # Automatically claim guest / unlinked / demo-user reports for this user_id if logged in
+        # 1. Cleanup: Mark reports without valid image_url as deleted (is_deleted = True)
         try:
-            target_user_str = str(user_id)
-            for r in all_reports:
-                if r.is_guest or r.user_id is None or str(r.user_id) == "demo-user":
-                    r.user_id = target_user_str
-                    r.is_guest = False
-            await db.flush()
-        except Exception as claim_err:
-            logger.warning(f"[Reports] Claim guest reports note: {claim_err}")
+            clean_stmt = (
+                update(CivicReport)
+                .where(
+                    or_(
+                        CivicReport.image_url == None,
+                        CivicReport.image_url == "",
+                        ~CivicReport.image_url.like("http%")
+                    )
+                )
+                .values(is_deleted=True, deleted_at=datetime.now(timezone.utc))
+            )
+            await db.execute(clean_stmt)
+            await db.commit()
+        except Exception as clean_err:
+            logger.warning(f"[Reports] DB cleanup note: {clean_err}")
 
-        # Always return all reports so that even after app reinstallations, device switches, or guest logins,
-        # all database reports are fetched and displayed on the user's Activity Page.
-        reports_to_return = all_reports
+        # 2. Claim guest / demo-user reports for this user_id if logged in
+        target_user_str = str(user_id)
+        stmt_all = select(CivicReport).where(CivicReport.is_deleted == False)
+        res_all = await db.execute(stmt_all)
+        all_unfiltered = res_all.scalars().all()
+        for r in all_unfiltered:
+            if r.is_guest or r.user_id is None or str(r.user_id) == "demo-user":
+                r.user_id = target_user_str
+                r.is_guest = False
+        await db.flush()
+
+        # 3. Fetch active non-deleted reports for user_id
+        stmt = (
+            select(CivicReport)
+            .where(
+                CivicReport.user_id == target_user_str,
+                CivicReport.is_deleted == False
+            )
+            .order_by(CivicReport.created_at.desc())
+        )
+        res = await db.execute(stmt)
+        reports_to_return = res.scalars().all()
 
         results = []
         for r in reports_to_return:
@@ -1129,13 +1153,13 @@ async def fetch_my_reports(
                 from app.modules.infrastructure_identity.service import get_identity_service
                 id_svc = get_identity_service()
                 loc_res = await id_svc.reverse_geocode(r.latitude, r.longitude)
-                if loc_res and loc_res.address:
-                    place_address = loc_res.address
+                if loc_res and loc_res.get("address"):
+                    place_address = loc_res.get("address")
             except Exception:
                 pass
             
             if not place_address:
-                place_address = r.description if (r.description and len(r.description) > 6 and " " in r.description) else f"MG Road Corridor, Bengaluru (Lat {r.latitude:.4f}, Lng {r.longitude:.4f})"
+                place_address = r.description if (r.description and len(r.description) > 6 and " " in r.description) else f"Location ({r.latitude:.4f}° N, {r.longitude:.4f}° E)"
             identity_note = None
 
             try:

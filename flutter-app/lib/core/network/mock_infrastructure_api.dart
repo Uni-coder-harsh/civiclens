@@ -1083,6 +1083,9 @@ class MockInfrastructureApi implements InfrastructureApi {
       );
     }
   }
+
+  @override
+  Future<void> deleteReport(String reportId) async {}
 }
 
 class _DefectSeed {

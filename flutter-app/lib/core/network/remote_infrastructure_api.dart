@@ -333,4 +333,9 @@ class RemoteInfrastructureApi implements InfrastructureApi {
         .map((e) => ReportResponse.fromJson(e as Map<String, dynamic>))
         .toList();
   }
+
+  @override
+  Future<void> deleteReport(String reportId) async {
+    await dio.delete('/v1/reports/$reportId');
+  }
 }

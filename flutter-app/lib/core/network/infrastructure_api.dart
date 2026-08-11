@@ -108,4 +108,7 @@ abstract class InfrastructureApi {
 
   // Sync
   Future<List<ReportResponse>> syncPendingDrafts(List<ReportPayload> drafts);
+
+  // Delete
+  Future<void> deleteReport(String reportId);
 }

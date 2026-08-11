@@ -21,12 +21,51 @@ class DraftQueuePage extends ConsumerStatefulWidget {
 }
 
 class _DraftQueuePageState extends ConsumerState<DraftQueuePage> {
+  String _selectedFilter = 'all';
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(syncControllerProvider.notifier).syncAll();
     });
+  }
+
+  Widget _buildFilterChip(String key, String label, IconData icon) {
+    final isSelected = _selectedFilter == key;
+    return ChoiceChip(
+      showCheckmark: false,
+      avatar: Icon(
+        icon,
+        size: 16,
+        color: isSelected ? Colors.white : const Color(0xFF94A3B8),
+      ),
+      label: Text(
+        label,
+        style: TextStyle(
+          color: isSelected ? Colors.white : const Color(0xFF94A3B8),
+          fontFamily: 'Inter',
+          fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+          fontSize: 12,
+        ),
+      ),
+      selected: isSelected,
+      selectedColor: const Color(0xFF4F46E5),
+      backgroundColor: const Color(0xFF1E293B),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(
+          color: isSelected ? const Color(0xFF6366F1) : const Color(0xFF334155),
+        ),
+      ),
+      onSelected: (selected) {
+        if (selected) {
+          setState(() {
+            _selectedFilter = key;
+          });
+        }
+      },
+    );
   }
 
   @override
@@ -42,11 +81,11 @@ class _DraftQueuePageState extends ConsumerState<DraftQueuePage> {
             backgroundColor: Theme.of(context).scaffoldBackgroundColor,
             surfaceTintColor: Colors.transparent,
             pinned: true,
-            expandedHeight: 100,
+            expandedHeight: 120,
             flexibleSpace: FlexibleSpaceBar(
-              titlePadding: const EdgeInsets.only(left: 20, bottom: 16),
+              titlePadding: const EdgeInsets.only(left: 16, bottom: 16),
               title: Text(
-                'Activity',
+                'Activity & Draft Queue',
                 style: TextStyle(
                   fontFamily: 'Inter',
                   fontWeight: FontWeight.w800,
@@ -122,11 +161,30 @@ class _DraftQueuePageState extends ConsumerState<DraftQueuePage> {
                   const SizedBox.shrink(),
             ],
           ),
+          SliverToBoxAdapter(
+            child: Container(
+              height: 48,
+              margin: const EdgeInsets.only(top: 8, bottom: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: [
+                  _buildFilterChip('all', 'All Reports', Icons.dashboard_rounded),
+                  const SizedBox(width: 8),
+                  _buildFilterChip('pending', 'Pending', Icons.schedule_rounded),
+                  const SizedBox(width: 8),
+                  _buildFilterChip('synced', 'In Progress', Icons.sync_rounded),
+                  const SizedBox(width: 8),
+                  _buildFilterChip('completed', 'Completed', Icons.check_circle_rounded),
+                ],
+              ),
+            ),
+          ),
           draftAsync.when(
             loading: () => const SliverFillRemaining(
               child: Center(
                 child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation(Color(0xFF4F46E5)),
+                  valueColor: AlwaysStoppedAnimation(Color(0xFF818CF8)),
                 ),
               ),
             ),
@@ -169,16 +227,36 @@ class _DraftQueuePageState extends ConsumerState<DraftQueuePage> {
                 return const SliverFillRemaining(child: _EmptyState());
               }
 
+              var filteredItems = items;
+              if (_selectedFilter == 'pending') {
+                filteredItems = items.where((d) => d.syncState == SyncState.pending || d.syncState == SyncState.uploading || d.syncState == SyncState.failed).toList();
+              } else if (_selectedFilter == 'synced') {
+                filteredItems = items.where((d) => d.syncState == SyncState.synced).toList();
+              } else if (_selectedFilter == 'completed') {
+                filteredItems = items.where((d) => d.payload.severity?.toLowerCase() == 'low' || (d.syncState == SyncState.synced && d.payload.category != null)).toList();
+              }
+
+              if (filteredItems.isEmpty) {
+                return SliverFillRemaining(
+                  child: Center(
+                    child: Text(
+                      'No reports found under "${_selectedFilter.toUpperCase()}" filter.',
+                      style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 13),
+                    ),
+                  ),
+                );
+              }
+
               // Group by sync state for section headers
-              final uploading = items
+              final uploading = filteredItems
                   .where((d) => d.syncState == SyncState.uploading)
                   .toList();
               final failed =
-                  items.where((d) => d.syncState == SyncState.failed).toList();
+                  filteredItems.where((d) => d.syncState == SyncState.failed).toList();
               final pending =
-                  items.where((d) => d.syncState == SyncState.pending).toList();
+                  filteredItems.where((d) => d.syncState == SyncState.pending).toList();
               final synced =
-                  items.where((d) => d.syncState == SyncState.synced).toList();
+                  filteredItems.where((d) => d.syncState == SyncState.synced).toList();
 
               final sections = <Widget>[];
               if (uploading.isNotEmpty) {
@@ -462,9 +540,9 @@ class _DraftCard extends ConsumerWidget {
                                 const SizedBox(width: 4),
                                 Expanded(
                                   child: Text(
-                                    draft.description.contains('Road') || draft.description.contains('Street') || draft.description.contains('Bengaluru') || draft.description.contains('Corridor')
+                                    draft.description.isNotEmpty && !draft.description.startsWith('Multimodal')
                                         ? draft.description
-                                        : 'St. Joseph\'s Area, MG Road Corridor, Bengaluru',
+                                        : 'Location (${draft.capture.latitude.toStringAsFixed(4)}° N, ${draft.capture.longitude.toStringAsFixed(4)}° E)',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: TextStyle(
@@ -1111,9 +1189,9 @@ void _showReportDetailModal(BuildContext context, DraftItem item) {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                draft.description.contains('Road') || draft.description.contains('Street') || draft.description.contains('Bengaluru')
+                                draft.description.isNotEmpty && !draft.description.startsWith('Multimodal')
                                     ? draft.description
-                                    : 'St. Joseph\'s Area, 3rd Cross Road, Ashokanagar, Bengaluru',
+                                    : 'Location ($latStr° N, $lngStr° E)',
                                 style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
                               ),
                               const SizedBox(height: 3),

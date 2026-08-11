@@ -159,6 +159,15 @@ class DraftQueueRepository {
     }
 
     await _dao.deleteDraft(id);
+
+    try {
+      await _api.deleteReport(id);
+    } catch (e) {
+      assert(() {
+        print('[DraftQueueRepository] ⚠️ Backend delete notification note for report $id: $e');
+        return true;
+      }());
+    }
   }
 
   /// Fetches reports submitted by [userId] from Neon DB server and upserts them locally so they appear in Activity Page
