@@ -1005,11 +1005,11 @@ async def fetch_my_reports(
         res = await db.execute(stmt)
         all_reports = res.scalars().all()
 
-        # Automatically claim guest / unlinked reports for this user_id if logged in
+        # Automatically claim guest / unlinked / demo-user reports for this user_id if logged in
         try:
             target_user_uuid = uuid.UUID(user_id)
             for r in all_reports:
-                if r.is_guest or r.user_id is None:
+                if r.is_guest or r.user_id is None or str(r.user_id) == "demo-user":
                     r.user_id = target_user_uuid
                     r.is_guest = False
             await db.flush()

@@ -371,10 +371,11 @@ class _ReportFormScreenState extends ConsumerState<ReportFormScreen> {
   }
 
   Future<void> _submit() async {
+    final session = ref.read(authSessionProvider);
     final draftId = await ref.read(_reportFormProvider.notifier).submitDraft(
           capture: _capture,
           imagePath: _imagePath.isEmpty ? 'mock://placeholder' : _imagePath,
-          userId: 'demo-user',
+          userId: session.userId,
         );
     if (draftId != null && mounted) {
       context.go('/home/activity');
