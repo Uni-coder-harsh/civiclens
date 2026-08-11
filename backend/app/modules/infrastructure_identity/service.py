@@ -358,7 +358,28 @@ class InfrastructureIdentityService:
         db.add(identity_rec)
         await db.flush()
 
-        # 2. Add Organization Records
+        # 2. Auto-register Discovered Contractor Organizations in Neon DB organizations table
+        from app.modules.organizations.model import Organization
+        for org in response.organizations:
+            try:
+                org_stmt = select(Organization).where(Organization.name == org.name)
+                org_res = await db.execute(org_stmt)
+                existing_org = org_res.scalar_one_or_none()
+
+                if not existing_org:
+                    new_org = Organization(
+                        id=uuid.uuid4(),
+                        name=org.name,
+                        description=f"Discovered Entity ({org.role.value}) via {org.source} for {top_infra.name if top_infra else 'Infrastructure Asset'}",
+                        billing_plan="free",
+                    )
+                    db.add(new_org)
+                    await db.flush()
+                    logger.info(f"[Identity] 🏢 Auto-registered Contractor Organization '{org.name}' in Neon DB (id={new_org.id})")
+            except Exception as org_err:
+                logger.warning(f"[Identity] Note when auto-registering Organization '{org.name}': {org_err}")
+
+        # 3. Add Organization Records
         for org in response.organizations:
             org_rec = InfrastructureOrganizationRecord(
                 id=uuid.uuid4(),

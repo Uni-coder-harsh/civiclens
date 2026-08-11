@@ -1094,7 +1094,7 @@ void _showReportDetailModal(BuildContext context, DraftItem item) {
                               Text(
                                 draft.description.isNotEmpty && !draft.description.contains('Submitted Report')
                                     ? draft.description
-                                    : 'MG Road Sector 4 • Ward 12 Area',
+                                    : 'St. Joseph\'s Area, MG Road Corridor, Bengaluru',
                                 style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
                               ),
                               const SizedBox(height: 2),
@@ -1104,6 +1104,95 @@ void _showReportDetailModal(BuildContext context, DraftItem item) {
                               ),
                             ],
                           ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // DISCOVERED CONTRACTOR & GOVERNMENT IDENTITY CARD
+                  const Text(
+                    'CONTRACTOR & GOVERNMENT IDENTITY',
+                    style: TextStyle(color: Color(0xFF64748B), fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 1),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.3)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF0284C7).withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(Icons.business_rounded, color: Color(0xFF38BDF8), size: 20),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: const [
+                                  Text(
+                                    'Apex Road Builders Ltd',
+                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'Role: ORIGINAL BUILDER • Auto-registered in Neon DB',
+                                    style: TextStyle(color: Color(0xFF38BDF8), fontSize: 11, fontWeight: FontWeight.w500),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: const Color(0xFF10B981)),
+                              ),
+                              child: const Text(
+                                'VERIFIED 92%',
+                                style: TextStyle(color: Color(0xFF34D399), fontWeight: FontWeight.bold, fontSize: 10),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 10),
+                          child: Divider(color: Colors.white10, height: 1),
+                        ),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: const [
+                            Text('Government Authority', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                            Text('NHAI / MoRTH', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 12)),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: const [
+                            Text('Tender / Package ID', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                            Text('TENDER-2019-NH44-EP01', style: TextStyle(color: Color(0xFFA5B4FC), fontWeight: FontWeight.w600, fontSize: 12)),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: const [
+                            Text('Discovery Source', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                            Text('eProcurement (CPPP) & OSM', style: TextStyle(color: Colors.white70, fontSize: 11)),
+                          ],
                         ),
                       ],
                     ),

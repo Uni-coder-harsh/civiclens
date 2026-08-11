@@ -205,6 +205,13 @@ class ReportResponse {
   final String? address;
   final String? passportNumber;
   final double? structuralHealthIndex;
+  final String? contractorName;
+  final String? contractorRole;
+  final String? authority;
+  final String? tenderId;
+  final String? verificationStatus;
+  final double? confidenceScore;
+  final String? identityNote;
 
   const ReportResponse({
     required this.reportId,
@@ -225,6 +232,13 @@ class ReportResponse {
     this.address,
     this.passportNumber,
     this.structuralHealthIndex,
+    this.contractorName,
+    this.contractorRole,
+    this.authority,
+    this.tenderId,
+    this.verificationStatus,
+    this.confidenceScore,
+    this.identityNote,
   });
 
   Map<String, dynamic> toJson() => {
@@ -246,6 +260,13 @@ class ReportResponse {
         'address': address,
         'passport_number': passportNumber,
         'structural_health_index': structuralHealthIndex,
+        'contractor_name': contractorName,
+        'contractor_role': contractorRole,
+        'authority': authority,
+        'tender_id': tenderId,
+        'verification_status': verificationStatus,
+        'confidence_score': confidenceScore,
+        'identity_note': identityNote,
       };
 
   factory ReportResponse.fromJson(Map<String, dynamic> json) => ReportResponse(
@@ -273,5 +294,12 @@ class ReportResponse {
         address: json['address'] as String?,
         passportNumber: json['passport_number'] as String?,
         structuralHealthIndex: (json['structural_health_index'] as num?)?.toDouble(),
+        contractorName: json['contractor_name'] as String?,
+        contractorRole: json['contractor_role'] as String?,
+        authority: json['authority'] as String?,
+        tenderId: json['tender_id'] as String?,
+        verificationStatus: json['verification_status'] as String?,
+        confidenceScore: (json['confidence_score'] as num?)?.toDouble(),
+        identityNote: json['identity_note'] as String?,
       );
 }
