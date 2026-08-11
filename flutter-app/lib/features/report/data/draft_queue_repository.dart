@@ -164,33 +164,57 @@ class DraftQueueRepository {
   /// Fetches reports submitted by [userId] from Neon DB server and upserts them locally so they appear in Activity Page
   Future<int> fetchAndCacheUserReports(String userId) async {
     try {
+      assert(() {
+        print('[DraftQueueRepository] 🌐 Syncing reports from server for user: $userId...');
+        return true;
+      }());
       final remoteReports = await _api.fetchMyReports(userId);
+      assert(() {
+        print('[DraftQueueRepository] 📥 Server returned ${remoteReports.length} report(s). Upserting into local SQLite database...');
+        return true;
+      }());
+
       for (final r in remoteReports) {
-        final companion = ReportDraftsCompanion.insert(
-          id: r.reportId,
-          userId: userId,
-          category: r.category ?? r.aiLabel ?? 'pothole',
-          severity: r.severity ?? 'medium',
-          description: r.description ?? r.address ?? 'Submitted Report (${r.status.name})',
-          latitude: r.latitude ?? 0.0,
-          longitude: r.longitude ?? 0.0,
-          altitudeMeters: 0.0,
-          accuracyMeters: 0.0,
-          bearingDegrees: 0.0,
-          speedMps: 0.0,
-          capturedAtUtc: r.createdAtUtc,
-          imagePath: r.imageUrl ?? '',
-          infrastructureId: Value(r.infrastructureId),
-          qualityGate: 'ok',
-          isGuest: false,
-          syncState: 'synced',
-          createdAtUtc: r.createdAtUtc,
-          syncedAtUtc: Value(r.createdAtUtc),
-        );
-        await _dao.insertSyncedDraft(companion);
+        try {
+          final companion = ReportDraftsCompanion.insert(
+            id: r.reportId,
+            userId: userId,
+            category: r.category ?? r.aiLabel ?? 'pothole',
+            severity: r.severity ?? 'medium',
+            description: r.description ?? r.address ?? 'Submitted Report (${r.status.name})',
+            latitude: r.latitude ?? 0.0,
+            longitude: r.longitude ?? 0.0,
+            altitudeMeters: 0.0,
+            accuracyMeters: 0.0,
+            bearingDegrees: 0.0,
+            speedMps: 0.0,
+            capturedAtUtc: r.createdAtUtc,
+            imagePath: r.imageUrl ?? '',
+            infrastructureId: Value(r.infrastructureId),
+            qualityGate: 'ok',
+            isGuest: false,
+            syncState: 'synced',
+            createdAtUtc: r.createdAtUtc,
+            syncedAtUtc: Value(r.createdAtUtc),
+          );
+          await _dao.insertSyncedDraft(companion);
+        } catch (itemErr) {
+          assert(() {
+            print('[DraftQueueRepository Item Error] Failed to upsert report ${r.reportId}: $itemErr');
+            return true;
+          }());
+        }
       }
+      assert(() {
+        print('[DraftQueueRepository] ✅ Successfully cached ${remoteReports.length} report(s) into Activity Page.');
+        return true;
+      }());
       return remoteReports.length;
-    } catch (_) {
+    } catch (e, st) {
+      assert(() {
+        print('[DraftQueueRepository Error] ❌ Failed to fetch/cache remote reports: $e\n$st');
+        return true;
+      }());
       return 0;
     }
   }

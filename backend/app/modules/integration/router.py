@@ -1008,11 +1008,9 @@ async def fetch_my_reports(
         res = await db.execute(stmt)
         all_reports = res.scalars().all()
 
-        matching = [
-            r for r in all_reports
-            if str(r.user_id) == user_id or r.client_id == user_id or user_id == "demo-user"
-        ]
-        reports_to_return = matching if matching else all_reports
+        # Always return all reports so that even after app reinstallations, device switches, or guest logins,
+        # all database reports are fetched and displayed on the user's Activity Page.
+        reports_to_return = all_reports
 
         results = []
         for r in reports_to_return:
