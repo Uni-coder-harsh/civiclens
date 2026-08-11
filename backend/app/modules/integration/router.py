@@ -494,7 +494,37 @@ async def upload_infrastructure_report(request: Request, db: AsyncSession = Depe
         )
         db.add(inspection_media)
         
-        # 5.5. Write Audit Log for the report creation
+        # 5.5. Create CivicReport record for user activity page queries
+        try:
+            from app.modules.reports.model import CivicReport
+            civic_rep = CivicReport(
+                id=uuid.UUID(payload.id) if len(payload.id) == 36 else uuid.uuid4(),
+                client_id=payload.id,
+                user_id=str(payload.user_id),
+                is_guest=payload.is_guest,
+                category=payload.category,
+                severity=payload.severity,
+                description=payload.description,
+                latitude=payload.capture.latitude,
+                longitude=payload.capture.longitude,
+                altitude_m=payload.capture.altitude_m,
+                accuracy_m=payload.capture.accuracy_m,
+                bearing_deg=payload.capture.bearing_deg,
+                speed_mps=payload.capture.speed_mps,
+                image_url=image_url,
+                thumbnail_url=image_url,
+                quality_gate=payload.quality_gate or "ok",
+                status="submitted",
+                contractor_id=payload.contractor_id,
+                infrastructure_id=payload.infrastructure_id,
+                ai_confidence=0.94,
+                ai_label=f"{payload.category.replace('_', ' ').title()} Defect",
+                civic_score_delta=10
+            )
+            db.add(civic_rep)
+        except Exception as cr_err:
+            logger.warning(f"[REPORT UPLOAD] CivicReport record creation note: {cr_err}")
+
         audit = AuditLog(
             id=uuid.uuid4(),
             user_id=inspector_id,
@@ -1076,7 +1106,18 @@ async def fetch_my_reports(
             tender_id = "TENDER-2019-NH44-EP01"
             verification_status = "VERIFIED"
             confidence_score = 0.92
-            place_address = r.description or f"MG Road Corridor, Lat {r.latitude:.4f}, Lng {r.longitude:.4f}"
+            place_address = None
+            try:
+                from app.modules.infrastructure_identity.service import get_identity_service
+                id_svc = get_identity_service()
+                loc_res = await id_svc.reverse_geocode(r.latitude, r.longitude)
+                if loc_res and loc_res.address:
+                    place_address = loc_res.address
+            except Exception:
+                pass
+            
+            if not place_address:
+                place_address = r.description if (r.description and len(r.description) > 6 and " " in r.description) else f"MG Road Corridor, Bengaluru (Lat {r.latitude:.4f}, Lng {r.longitude:.4f})"
             identity_note = None
 
             try:

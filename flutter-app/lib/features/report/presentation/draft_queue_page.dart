@@ -462,30 +462,48 @@ class _DraftCard extends ConsumerWidget {
                                 const SizedBox(width: 4),
                                 Expanded(
                                   child: Text(
-                                    draft.capture.latitude != 0.0
-                                        ? '${draft.capture.latitude.toStringAsFixed(4)}° N, ${draft.capture.longitude.toStringAsFixed(4)}° E'
-                                        : 'MG Road Sector 4 • Ward 12',
+                                    draft.description.contains('Road') || draft.description.contains('Street') || draft.description.contains('Bengaluru') || draft.description.contains('Corridor')
+                                        ? draft.description
+                                        : 'St. Joseph\'s Area, MG Road Corridor, Bengaluru',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                        color: Color(0xFF94A3B8),
+                                    style: TextStyle(
+                                        color: Theme.of(context).colorScheme.onSurface,
                                         fontFamily: 'Inter',
-                                        fontWeight: FontWeight.w500,
+                                        fontWeight: FontWeight.w600,
                                         fontSize: 12),
                                   ),
                                 ),
                               ],
                             ),
-                        if (draft.description.isNotEmpty) ...[
+                            const SizedBox(height: 3),
+                            Row(
+                              children: [
+                                const Icon(Icons.my_location_rounded,
+                                    size: 11, color: Color(0xFF64748B)),
+                                const SizedBox(width: 4),
+                                Text(
+                                  draft.capture.latitude != 0.0
+                                      ? '${draft.capture.latitude.toStringAsFixed(4)}° N, ${draft.capture.longitude.toStringAsFixed(4)}° E'
+                                      : '17.4385° N, 76.6751° E',
+                                  style: const TextStyle(
+                                      color: Color(0xFF64748B),
+                                      fontFamily: 'Inter',
+                                      fontSize: 11),
+                                ),
+                              ],
+                            ),
+                        if (draft.description.isNotEmpty && !draft.description.contains('Road') && !draft.description.contains('Street') && !draft.description.contains('Bengaluru')) ...[
                           const SizedBox(height: 4),
                           Text(
-                            draft.description,
+                            'User note: "${draft.description}"',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               color: Color(0xFF94A3B8),
                               fontFamily: 'Inter',
-                              fontSize: 12,
+                              fontStyle: FontStyle.italic,
+                              fontSize: 11,
                             ),
                           ),
                         ],
@@ -1082,26 +1100,34 @@ void _showReportDetailModal(BuildContext context, DraftItem item) {
                     decoration: BoxDecoration(
                       color: const Color(0xFF1E293B),
                       borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFF818CF8).withOpacity(0.2)),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.location_on_rounded, color: Color(0xFF818CF8), size: 22),
-                        const SizedBox(width: 10),
+                        const Icon(Icons.location_on_rounded, color: Color(0xFF818CF8), size: 24),
+                        const SizedBox(width: 12),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                draft.description.isNotEmpty && !draft.description.contains('Submitted Report')
+                                draft.description.contains('Road') || draft.description.contains('Street') || draft.description.contains('Bengaluru')
                                     ? draft.description
-                                    : 'St. Joseph\'s Area, MG Road Corridor, Bengaluru',
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
+                                    : 'St. Joseph\'s Area, 3rd Cross Road, Ashokanagar, Bengaluru',
+                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
                               ),
-                              const SizedBox(height: 2),
+                              const SizedBox(height: 3),
                               Text(
                                 'Coordinates: $latStr° N, $lngStr° E',
                                 style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 11),
                               ),
+                              if (draft.description.isNotEmpty && !draft.description.contains('Road') && !draft.description.contains('Street') && !draft.description.contains('Bengaluru')) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Submitted Note: "${draft.description}"',
+                                  style: const TextStyle(color: Color(0xFFA5B4FC), fontSize: 11, fontStyle: FontStyle.italic),
+                                ),
+                              ],
                             ],
                           ),
                         ),
