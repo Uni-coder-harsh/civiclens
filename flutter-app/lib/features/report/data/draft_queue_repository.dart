@@ -66,6 +66,33 @@ class DraftQueueRepository {
   Future<bool> saveDraft(ReportPayload payload) async {
     try {
       await _api.uploadInfrastructureReport(payload);
+      try {
+        final companion = ReportDraftsCompanion.insert(
+          id: payload.id,
+          userId: payload.userId,
+          category: payload.category.name,
+          severity: payload.severity.name,
+          description: payload.description,
+          latitude: payload.capture.latitude,
+          longitude: payload.capture.longitude,
+          altitudeMeters: payload.capture.altitudeMeters,
+          accuracyMeters: payload.capture.accuracyMeters,
+          bearingDegrees: payload.capture.bearingDegrees,
+          speedMps: payload.capture.speedMps,
+          capturedAtUtc: payload.capture.capturedAtUtc,
+          imagePath: payload.imagePath,
+          thumbnailPath: Value(payload.thumbnailPath),
+          contractorId: Value(payload.contractorId),
+          infrastructureId: Value(payload.infrastructureId),
+          qualityGate: payload.qualityGate.name,
+          isGuest: payload.isGuest,
+          syncState: 'synced',
+          createdAtUtc: DateTime.now().toUtc(),
+          syncedAtUtc: Value(DateTime.now().toUtc()),
+          sensorData: Value(payload.sensorData),
+        );
+        await _dao.insertSyncedDraft(companion);
+      } catch (_) {}
       return true; // uploaded directly to server
     } on Exception catch (e) {
       // Server unreachable / error — save locally for retry

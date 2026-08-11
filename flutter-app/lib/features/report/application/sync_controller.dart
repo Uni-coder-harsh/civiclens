@@ -119,19 +119,15 @@ class SyncController extends AsyncNotifier<SyncSummaryState> {
     // Initialize pending count based on fetched drafts
     _updateState(pendingCount: drafts.length);
 
-    if (drafts.isEmpty) {
-      _isSyncing = false;
-      _updateState(isSyncing: false, pendingCount: 0);
-      return;
-    }
+    if (drafts.isNotEmpty) {
+      // Critical items first, then FIFO
+      final sorted = _sortBySeverity(drafts);
 
-    // Critical items first, then FIFO
-    final sorted = _sortBySeverity(drafts);
-
-    // Sync each draft individually to upload image files to Supabase S3 storage,
-    // persist records in PostgreSQL, and write database audit logs correctly.
-    for (final draft in sorted) {
-      await _uploadDraft(draft.id);
+      // Sync each draft individually to upload image files to Supabase S3 storage,
+      // persist records in PostgreSQL, and write database audit logs correctly.
+      for (final draft in sorted) {
+        await _uploadDraft(draft.id);
+      }
     }
 
     // Fetch remote reports for the user from Neon DB server

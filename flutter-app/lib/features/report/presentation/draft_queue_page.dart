@@ -12,13 +12,24 @@ import '../data/draft_queue_repository.dart';
 /// Route: `/home/activity`
 ///
 /// Displays all drafts with live [SyncState] badges and bulk/per-draft actions.
-/// Uses [draftItemsStreamProvider] (top-level) — safe to watch in build().
-class DraftQueuePage extends ConsumerWidget {
+class DraftQueuePage extends ConsumerStatefulWidget {
   const DraftQueuePage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    // ✅ Top-level provider — stable identity across rebuilds, no infinite loading
+  ConsumerState<DraftQueuePage> createState() => _DraftQueuePageState();
+}
+
+class _DraftQueuePageState extends ConsumerState<DraftQueuePage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(syncControllerProvider.notifier).syncAll();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final draftAsync = ref.watch(draftItemsStreamProvider);
     final syncState = ref.watch(syncControllerProvider);
 
