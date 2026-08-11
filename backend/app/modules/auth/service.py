@@ -106,6 +106,9 @@ class AuthService:
         org_id = await self._get_user_org_id(user.id)
         access_token, refresh_token = self._issue_tokens(user, org_id)
 
+        # Enforce maximum 3 active sessions per user; prune oldest sessions automatically
+        await self.session_repo.enforce_max_sessions(user.id, max_allowed=3)
+
         expiry = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
         await self.session_repo.create(
             UserSession(

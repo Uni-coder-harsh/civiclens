@@ -9,6 +9,7 @@ import '../../../shared/defect.dart';
 import '../../../shared/report_payload.dart';
 import '../application/sync_controller.dart';
 import '../data/draft_queue_repository.dart';
+import '../../auth/application/auth_controller.dart';
 
 // ── Internal state for the form ───────────────────────────────────────────────
 

@@ -47,6 +47,26 @@ class SessionRepository(BaseRepository[UserSession]):
         for session in result.scalars().all():
             await self.session.delete(session)
 
+    async def enforce_max_sessions(self, user_id: uuid.UUID, max_allowed: int = 3) -> None:
+        """
+        Enforces maximum concurrent active sessions per user (default 3).
+        If active sessions exceed or equal max_allowed, deletes the oldest sessions so that
+        the user never accumulates unbounded login sessions across device reinstalls.
+        """
+        query = (
+            select(UserSession)
+            .where(UserSession.user_id == user_id)
+            .order_by(UserSession.created_at.asc())
+        )
+        result = await self.session.execute(query)
+        active_sessions = list(result.scalars().all())
+
+        if len(active_sessions) >= max_allowed:
+            to_delete_count = len(active_sessions) - max_allowed + 1
+            for old_session in active_sessions[:to_delete_count]:
+                await self.session.delete(old_session)
+            await self.session.flush()
+
 class OTPRepository(BaseRepository[OTPVerification]):
     """Data repository interface managing OTP security tokens."""
     def __init__(self, db_session: AsyncSession):

@@ -189,6 +189,7 @@ class InfrastructureIdentityService:
                 state=location.state,
                 type_hint=req.type_hint,
                 queries=query_signals,
+                address=location.address,
             )
 
         # ── 4. Cross Validation, Organization Extraction & Conflict Check ──

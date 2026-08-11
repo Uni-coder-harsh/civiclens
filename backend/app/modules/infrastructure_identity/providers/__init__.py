@@ -10,17 +10,20 @@ from app.modules.infrastructure_identity.providers.pmgsy_provider import PMGSYPr
 from app.modules.infrastructure_identity.providers.pwd_provider import StatePWDProvider
 from app.modules.infrastructure_identity.providers.eproc_provider import EProcurementProvider
 
+from app.modules.infrastructure_identity.providers.campus_provider import CampusInfrastructureProvider
+
 logger = logging.getLogger(__name__)
 
 
 class ProviderRegistry:
     """
-    Registry of all verified Government & Geospatial Infrastructure Providers.
+    Registry of all verified Government, Campus & Geospatial Infrastructure Providers.
     Coordinates authority routing, non-crashing fallback chains, and staged execution.
     """
 
     def __init__(self):
         self.osm_provider = OpenStreetMapProvider()
+        self.campus_provider = CampusInfrastructureProvider()
         self.data_gov_provider = DataGovInProvider()
         self.morth_provider = MoRTHProvider()
         self.nhai_provider = NHAIProvider()
@@ -30,6 +33,7 @@ class ProviderRegistry:
 
         self.all_providers: List[GovernmentInfrastructureProvider] = [
             self.osm_provider,
+            self.campus_provider,
             self.data_gov_provider,
             self.morth_provider,
             self.nhai_provider,
@@ -70,16 +74,25 @@ class ProviderRegistry:
         state: Optional[str],
         type_hint: Optional[str],
         queries: List[str],
+        address: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Executes targeted authority routing across government providers.
+        Executes targeted authority routing across government & campus providers.
         """
         discovered = []
 
+        # Check if coordinates fall inside a University Campus / College Footprint
+        is_campus = self.campus_provider.is_campus_location(address or "", road_name)
+        if is_campus:
+            campus_name = self.campus_provider.extract_campus_name(address or "", road_name)
+            logger.info(f"[ProviderRegistry] 🎓 University / College Campus detected: '{campus_name}'. Routing governance to Campus Administration.")
+            try:
+                campus_projs = await self.campus_provider.search_projects(campus_name, district, state)
+                discovered.extend(campus_projs)
+            except Exception as c_err:
+                logger.warning(f"[ProviderRegistry] Campus provider note: {c_err}")
+
         # Authority Routing:
-        # If National Highway -> Prioritize NHAI & MoRTH
-        # If Rural -> Prioritize PMGSY
-        # If State Highway -> Prioritize State PWD
         road_ref_upper = (road_reference or "").upper()
 
         targeted_providers: List[GovernmentInfrastructureProvider] = []
