@@ -97,6 +97,12 @@ class NearbyDefectSchema(BaseModel):
     contractor_id: Optional[str] = None
     thumbnail_url: str
     watermark_verified: bool
+    address: Optional[str] = None
+    ai_severity: Optional[str] = None
+    ai_label: Optional[str] = None
+    ai_confidence: Optional[float] = None
+    image_url: Optional[str] = None
+
 
 class DuplicateMatchSchema(BaseModel):
     existing_report_id: str
@@ -731,7 +737,39 @@ async def _run_report_ai_analysis(report, db: AsyncSession, *, trigger: str) -> 
     return analysis
 
 @router.get("/reports/{report_id}", response_model=NearbyDefectSchema)
-async def fetch_defect(report_id: str):
+async def fetch_defect(report_id: str, db: AsyncSession = Depends(get_db_session)):
+    from app.modules.reports.model import CivicReport
+    
+    filters = [CivicReport.client_id == report_id]
+    try:
+        filters.append(CivicReport.id == uuid.UUID(report_id))
+    except ValueError:
+        pass
+        
+    stmt = select(CivicReport).where(or_(*filters))
+    res = await db.execute(stmt)
+    report = res.scalar_one_or_none()
+
+    if report:
+        # Reverse geocode if not already present or simply use report.address if available
+        # Note: if address is not populated in DB, we could geocode here, but for now we'll pass whatever is there
+        return {
+            "report_id": str(report.id),
+            "status": report.status,
+            "category": report.category,
+            "latitude": float(report.latitude) if report.latitude else 0.0,
+            "longitude": float(report.longitude) if report.longitude else 0.0,
+            "contractor_id": None,
+            "thumbnail_url": report.image_url or "",
+            "watermark_verified": report.watermark_verified,
+            "address": report.address,
+            "ai_severity": report.ai_severity,
+            "ai_label": report.ai_label,
+            "ai_confidence": float(report.ai_confidence) if report.ai_confidence is not None else None,
+            "image_url": report.image_url
+        }
+
+    # Fallback to in-memory store
     defect = store.defects.get(report_id)
     if not defect:
         raise HTTPException(status_code=404, detail="Defect not found")

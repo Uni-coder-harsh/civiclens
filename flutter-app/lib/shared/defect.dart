@@ -30,6 +30,11 @@ class NearbyDefect {
   final String? contractorId;
   final String thumbnailUrl;
   final bool watermarkVerified;
+  final String? address;
+  final String? aiSeverity;
+  final String? aiLabel;
+  final double? aiConfidence;
+  final String? imageUrl;
 
   const NearbyDefect({
     required this.reportId,
@@ -40,6 +45,11 @@ class NearbyDefect {
     this.contractorId,
     required this.thumbnailUrl,
     required this.watermarkVerified,
+    this.address,
+    this.aiSeverity,
+    this.aiLabel,
+    this.aiConfidence,
+    this.imageUrl,
   });
 
   Map<String, dynamic> toJson() => {
@@ -51,6 +61,11 @@ class NearbyDefect {
         'contractor_id': contractorId,
         'thumbnail_url': thumbnailUrl,
         'watermark_verified': watermarkVerified,
+        'address': address,
+        'ai_severity': aiSeverity,
+        'ai_label': aiLabel,
+        'ai_confidence': aiConfidence,
+        'image_url': imageUrl,
       };
 
   factory NearbyDefect.fromJson(Map<String, dynamic> json) => NearbyDefect(
@@ -62,6 +77,11 @@ class NearbyDefect {
         contractorId: json['contractor_id'] as String?,
         thumbnailUrl: json['thumbnail_url'] as String? ?? '',
         watermarkVerified: json['watermark_verified'] as bool? ?? false,
+        address: json['address'] as String?,
+        aiSeverity: json['ai_severity'] as String?,
+        aiLabel: json['ai_label'] as String?,
+        aiConfidence: (json['ai_confidence'] as num?)?.toDouble(),
+        imageUrl: json['image_url'] as String?,
       );
 }
 

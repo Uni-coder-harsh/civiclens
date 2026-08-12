@@ -166,7 +166,11 @@ class ReportDetailPage extends ConsumerWidget {
                       letterSpacing: 1,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 12),
+                  
+                  // Location address
+                  _LocationCard(defect: data.defect),
+                  const SizedBox(height: 12),
 
                   // Status + severity chips
                   _StatusRow(defect: data.defect),
@@ -268,6 +272,68 @@ class ReportDetailPage extends ConsumerWidget {
 }
 
 // ── Sub-Widgets ───────────────────────────────────────────────────────────────
+
+class _LocationCard extends StatelessWidget {
+  final NearbyDefect defect;
+  
+  const _LocationCard({required this.defect});
+
+  @override
+  Widget build(BuildContext context) {
+    final addressText = defect.address != null && defect.address!.isNotEmpty
+        ? defect.address!
+        : '${defect.latitude.toStringAsFixed(5)}, ${defect.longitude.toStringAsFixed(5)}';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(
+            Icons.location_on_rounded,
+            size: 20,
+            color: Color(0xFF0F172A),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  addressText,
+                  style: const TextStyle(
+                    color: Color(0xFF0F172A),
+                    fontFamily: 'Inter',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                if (defect.address != null && defect.address!.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4.0),
+                    child: Text(
+                      '${defect.latitude.toStringAsFixed(5)}, ${defect.longitude.toStringAsFixed(5)}',
+                      style: const TextStyle(
+                        color: Color(0xFF64748B),
+                        fontFamily: 'Inter',
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _StatusRow extends StatelessWidget {
   final NearbyDefect defect;
