@@ -7,9 +7,9 @@ Provides:
 """
 
 import logging
-import sys
 import os
 from typing import Optional
+from pathlib import Path
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.infrastructure.database import get_db_session
@@ -23,6 +23,24 @@ logger = logging.getLogger("civiclens.ai.dependencies")
 _inference_engine = None
 
 
+def _resolve_runtime_root() -> Path:
+    """
+    Find the root where runtime assets should live.
+
+    Local dev has ``ml-engine/src/inference/engine.py`` at the repository root.
+    Railway's backend Docker image only contains the backend app under /app, so
+    we fall back to the deployment root and download the model there.
+    """
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        if (parent / "ml-engine" / "src" / "inference" / "engine.py").exists():
+            return parent
+    for parent in current.parents:
+        if (parent / "alembic.ini").exists():
+            return parent
+    return current.parents[3]
+
+
 def get_inference_engine():
     """
     Returns the singleton CrackONNXInferenceEngine.
@@ -33,21 +51,11 @@ def get_inference_engine():
     if _inference_engine is not None:
         return _inference_engine
 
-    # Resolve ml-engine path relative to the backend working directory
+    # Resolve model path relative to the repo root locally, or /app in Railway.
     model_path = settings.MODEL_PATH
-    # dependencies.py lives at backend/app/modules/ai/.  Resolve configured
-    # relative paths from the repository root so ``ml-engine/best.onnx`` works
-    # both locally and after the Hugging Face fallback download.
-    project_root = os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-    )
+    runtime_root = _resolve_runtime_root()
     if not os.path.isabs(model_path):
-        model_path = os.path.join(project_root, model_path)
-
-    # Add ml-engine to sys.path so the engine module is importable
-    ml_engine_path = os.path.join(project_root, "ml-engine")
-    if ml_engine_path not in sys.path:
-        sys.path.insert(0, ml_engine_path)
+        model_path = str(runtime_root / model_path)
 
     try:
         # ── Download model from Supabase/CDN if not present locally (Railway support) ──
@@ -68,7 +76,7 @@ def get_inference_engine():
                 _inference_engine = None
                 return _inference_engine
 
-        from src.inference.engine import CrackONNXInferenceEngine
+        from app.modules.ai.onnx_engine import CrackONNXInferenceEngine
         _inference_engine = CrackONNXInferenceEngine(
             model_path=model_path,
             provider=settings.MODEL_PROVIDER,
@@ -82,7 +90,7 @@ def get_inference_engine():
         logger.warning(f"[ONNXEngine] Model not found at {model_path}. Inference will be unavailable.")
         _inference_engine = None
     except Exception as e:
-        logger.error(f"[ONNXEngine] Failed to load engine: {e}")
+        logger.exception(f"[ONNXEngine] Failed to load engine: {e}")
         _inference_engine = None
 
     return _inference_engine

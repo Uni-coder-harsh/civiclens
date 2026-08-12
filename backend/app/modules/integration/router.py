@@ -1378,7 +1378,7 @@ async def fetch_my_reports(
             authority = "National Highways Authority of India (NHAI)"
             tender_id = "TENDER-2019-NH44-EP01"
             verification_status = "VERIFIED"
-            confidence_score = 0.92
+            confidence_score = None
             place_address = None
             try:
                 from app.modules.infrastructure_identity.service import get_identity_service
