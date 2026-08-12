@@ -738,6 +738,7 @@ async def _run_report_ai_analysis(report, db: AsyncSession, *, trigger: str) -> 
 
 @router.get("/reports/{report_id}", response_model=NearbyDefectSchema)
 async def fetch_defect(report_id: str, db: AsyncSession = Depends(get_db_session)):
+    logger.info(f"[Reports] GET /v1/reports/{report_id} called")
     from app.modules.reports.model import CivicReport
     
     filters = [CivicReport.client_id == report_id]
@@ -751,8 +752,7 @@ async def fetch_defect(report_id: str, db: AsyncSession = Depends(get_db_session
     report = res.scalar_one_or_none()
 
     if report:
-        # Reverse geocode if not already present or simply use report.address if available
-        # Note: if address is not populated in DB, we could geocode here, but for now we'll pass whatever is there
+        logger.info(f"[Reports] found report in DB: {report.id}")
         return {
             "report_id": str(report.id),
             "status": report.status,
@@ -769,14 +769,16 @@ async def fetch_defect(report_id: str, db: AsyncSession = Depends(get_db_session
             "image_url": report.image_url
         }
 
-    # Fallback to in-memory store
+    logger.warning(f"[Reports] falling back to memory store for {report_id}")
     defect = store.defects.get(report_id)
     if not defect:
+        logger.error(f"[Reports] 404 Defect not found for {report_id}")
         raise HTTPException(status_code=404, detail="Defect not found")
     return defect
 
 @router.get("/reports/{report_id}/ai-analysis")
 async def get_ai_analysis(report_id: str, db: AsyncSession = Depends(get_db_session)):
+    logger.info(f"[AI Analysis] GET /v1/reports/{report_id}/ai-analysis called")
     """
     Returns the stored ONNX AI detection results for a specific report.
 
