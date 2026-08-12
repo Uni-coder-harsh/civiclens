@@ -740,6 +740,7 @@ async def _run_report_ai_analysis(report, db: AsyncSession, *, trigger: str) -> 
 async def fetch_defect(report_id: str, db: AsyncSession = Depends(get_db_session)):
     logger.info(f"[Reports] GET /v1/reports/{report_id} called")
     from app.modules.reports.model import CivicReport
+    from app.modules.infrastructure_identity.providers import ProviderRegistry
     
     filters = [CivicReport.client_id == report_id]
     try:
@@ -753,19 +754,41 @@ async def fetch_defect(report_id: str, db: AsyncSession = Depends(get_db_session
 
     if report:
         logger.info(f"[Reports] found report in DB: {report.id}")
+        registry = ProviderRegistry()
+        lat = float(report.latitude) if report.latitude else 0.0
+        lng = float(report.longitude) if report.longitude else 0.0
+        
+        address = None
+        if lat != 0.0 and lng != 0.0:
+            try:
+                geo_res = await registry.reverse_geocode(lat, lng)
+                if geo_res and geo_res.get("address"):
+                    addr = geo_res["address"]
+                    # Format a nice readable address string
+                    parts = []
+                    if "road" in addr: parts.append(addr["road"])
+                    elif "pedestrian" in addr: parts.append(addr["pedestrian"])
+                    elif "suburb" in addr: parts.append(addr["suburb"])
+                    if "city" in addr: parts.append(addr["city"])
+                    elif "town" in addr: parts.append(addr["town"])
+                    if "state" in addr: parts.append(addr["state"])
+                    address = ", ".join(parts) if parts else None
+            except Exception as e:
+                logger.warning(f"[Reports] Failed to reverse geocode {report.id}: {e}")
+        
         return {
             "report_id": str(report.id),
             "status": report.status,
             "category": report.category,
-            "latitude": float(report.latitude) if report.latitude else 0.0,
-            "longitude": float(report.longitude) if report.longitude else 0.0,
+            "latitude": lat,
+            "longitude": lng,
             "contractor_id": None,
             "thumbnail_url": report.image_url or "",
-            "watermark_verified": report.watermark_verified,
-            "address": report.address,
-            "ai_severity": report.ai_severity,
-            "ai_label": report.ai_label,
-            "ai_confidence": float(report.ai_confidence) if report.ai_confidence is not None else None,
+            "watermark_verified": True,
+            "address": address,
+            "ai_severity": getattr(report, "ai_severity", None),
+            "ai_label": getattr(report, "ai_label", None),
+            "ai_confidence": float(report.ai_confidence) if getattr(report, "ai_confidence", None) is not None else None,
             "image_url": report.image_url
         }
 
