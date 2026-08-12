@@ -111,4 +111,7 @@ abstract class InfrastructureApi {
 
   // Delete
   Future<void> deleteReport(String reportId);
+
+  // AI Analysis
+  Future<AiDetectionResult?> fetchAiAnalysis(String reportId);
 }

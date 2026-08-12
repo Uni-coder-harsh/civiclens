@@ -1,5 +1,133 @@
 import 'escalation.dart';
 
+// ────────────────────────────────────────────────────────────────────────────
+// AI Detection Models (populated from ONNX inference via backend)
+// ────────────────────────────────────────────────────────────────────────────
+
+/// Bounding box in original image pixel coordinates.
+class AiBoundingBox {
+  final int x1, y1, x2, y2;
+  final int width, height;
+
+  const AiBoundingBox({
+    required this.x1,
+    required this.y1,
+    required this.x2,
+    required this.y2,
+    required this.width,
+    required this.height,
+  });
+
+  factory AiBoundingBox.fromJson(Map<String, dynamic> j) => AiBoundingBox(
+        x1: (j['x1'] as num).toInt(),
+        y1: (j['y1'] as num).toInt(),
+        x2: (j['x2'] as num).toInt(),
+        y2: (j['y2'] as num).toInt(),
+        width: (j['width'] as num).toInt(),
+        height: (j['height'] as num).toInt(),
+      );
+}
+
+/// A single detected defect.
+class AiDetectionItem {
+  final int classId;
+  final String className;
+  final double confidence;
+  final AiBoundingBox boundingBox;
+
+  /// Human-readable display name, e.g. "Pothole"
+  String get displayName {
+    const names = {
+      'D00_Longitudinal_Crack': 'Longitudinal Crack',
+      'D10_Transverse_Crack':   'Transverse Crack',
+      'D20_Alligator_Crack':    'Alligator Crack',
+      'D30_Other_Corruption':   'Road Corruption',
+      'D40_Pothole':            'Pothole',
+    };
+    return names[className] ?? className.replaceAll('_', ' ');
+  }
+
+  const AiDetectionItem({
+    required this.classId,
+    required this.className,
+    required this.confidence,
+    required this.boundingBox,
+  });
+
+  factory AiDetectionItem.fromJson(Map<String, dynamic> j) => AiDetectionItem(
+        classId: (j['class_id'] as num).toInt(),
+        className: j['class_name'] as String,
+        confidence: (j['confidence'] as num).toDouble(),
+        boundingBox: AiBoundingBox.fromJson(j['bounding_box'] as Map<String, dynamic>),
+      );
+}
+
+/// Severity assessment derived by the severity engine.
+class AiSeverity {
+  final String severityLabel;   // "low" | "medium" | "high" | "critical"
+  final double severityScore;   // 0–100
+  final String? primaryClass;
+  final double? primaryConfidence;
+  final String explanation;
+  final int detectionCount;
+
+  const AiSeverity({
+    required this.severityLabel,
+    required this.severityScore,
+    this.primaryClass,
+    this.primaryConfidence,
+    required this.explanation,
+    required this.detectionCount,
+  });
+
+  factory AiSeverity.fromJson(Map<String, dynamic> j) => AiSeverity(
+        severityLabel: j['severity_label'] as String? ?? 'unknown',
+        severityScore: (j['severity_score'] as num?)?.toDouble() ?? 0.0,
+        primaryClass: j['primary_class'] as String?,
+        primaryConfidence: (j['primary_confidence'] as num?)?.toDouble(),
+        explanation: j['explanation'] as String? ?? '',
+        detectionCount: (j['detection_count'] as num?)?.toInt() ?? 0,
+      );
+}
+
+/// Full AI analysis result for one report.
+class AiDetectionResult {
+  final String status;               // "completed" | "no_inference"
+  final List<AiDetectionItem> detections;
+  final int detectionCount;
+  final int imageWidth;
+  final int imageHeight;
+  final AiSeverity? severity;
+  final Map<String, dynamic> raw;    // Full JSON for forwarding
+
+  const AiDetectionResult({
+    required this.status,
+    required this.detections,
+    required this.detectionCount,
+    required this.imageWidth,
+    required this.imageHeight,
+    this.severity,
+    required this.raw,
+  });
+
+  bool get hasDetections => detections.isNotEmpty;
+
+  factory AiDetectionResult.fromJson(Map<String, dynamic> j) {
+    final imgMap = j['image'] as Map<String, dynamic>?;
+    final rawDets = (j['detections'] as List<dynamic>?)?.cast<Map<String, dynamic>>() ?? [];
+    final sevMap = j['severity'] as Map<String, dynamic>?;
+    return AiDetectionResult(
+      status: j['status'] as String? ?? 'unknown',
+      detections: rawDets.map(AiDetectionItem.fromJson).toList(),
+      detectionCount: (j['detection_count'] as num?)?.toInt() ?? 0,
+      imageWidth:  (imgMap?['width']  as num?)?.toInt() ?? 1,
+      imageHeight: (imgMap?['height'] as num?)?.toInt() ?? 1,
+      severity: sevMap != null ? AiSeverity.fromJson(sevMap) : null,
+      raw: j,
+    );
+  }
+}
+
 enum ReportCategory {
   pothole,
   roadCrack,
@@ -212,6 +340,9 @@ class ReportResponse {
   final String? verificationStatus;
   final double? confidenceScore;
   final String? identityNote;
+  // ── AI Detection (ONNX bounding boxes + severity) ──────────────────────────
+  final AiDetectionResult? aiDetections;
+  final String? aiSeverity;
 
   const ReportResponse({
     required this.reportId,
@@ -239,6 +370,8 @@ class ReportResponse {
     this.verificationStatus,
     this.confidenceScore,
     this.identityNote,
+    this.aiDetections,
+    this.aiSeverity,
   });
 
   Map<String, dynamic> toJson() => {
@@ -267,6 +400,7 @@ class ReportResponse {
         'verification_status': verificationStatus,
         'confidence_score': confidenceScore,
         'identity_note': identityNote,
+        'ai_severity': aiSeverity,
       };
 
   factory ReportResponse.fromJson(Map<String, dynamic> json) => ReportResponse(
@@ -312,5 +446,9 @@ class ReportResponse {
             ? (json['confidence_score'] as num).toDouble()
             : double.tryParse(json['confidence_score']?.toString() ?? ''),
         identityNote: json['identity_note']?.toString(),
+        aiSeverity: json['ai_severity']?.toString(),
+        aiDetections: json['ai_detections'] is Map<String, dynamic>
+            ? AiDetectionResult.fromJson(json['ai_detections'] as Map<String, dynamic>)
+            : null,
       );
 }

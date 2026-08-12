@@ -47,7 +47,11 @@ class CivicReport(Base):
     # Sensor telemetry (JSON blob from sweep mode)
     sensor_data: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
 
-    # AI scoring (filled in async after submission)
+    # AI scoring (filled in async after submission, by ONNX inference)
     ai_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     ai_label: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    ai_severity: Mapped[str | None] = mapped_column(String(50), nullable=True, comment="ONNX-derived severity: low/medium/high/critical")
+    ai_detections: Mapped[dict | None] = mapped_column(JSONB, nullable=True, comment="Full ONNX DetectionResult JSON")
+    ai_inference_log_id: Mapped[str | None] = mapped_column(String(255), nullable=True, comment="FK to ai_inference_logs.id")
     civic_score_delta: Mapped[int] = mapped_column(nullable=False, default=10)
+

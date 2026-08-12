@@ -46,6 +46,20 @@ def get_inference_engine():
         sys.path.insert(0, ml_engine_path)
 
     try:
+        # ── Download model from Supabase/CDN if not present locally (Railway support) ──
+        if not os.path.exists(model_path):
+            download_url = settings.MODEL_DOWNLOAD_URL
+            if download_url:
+                logger.info(f"[ONNXEngine] Model not found locally. Downloading from {download_url} ...")
+                import urllib.request
+                os.makedirs(os.path.dirname(model_path) or ".", exist_ok=True)
+                urllib.request.urlretrieve(download_url, model_path)
+                logger.info(f"[ONNXEngine] Model downloaded to {model_path} ({os.path.getsize(model_path)//1024//1024} MB)")
+            else:
+                logger.warning(f"[ONNXEngine] Model not found at {model_path} and MODEL_DOWNLOAD_URL is not set. Inference unavailable.")
+                _inference_engine = None
+                return _inference_engine
+
         from src.inference.engine import CrackONNXInferenceEngine
         _inference_engine = CrackONNXInferenceEngine(
             model_path=model_path,

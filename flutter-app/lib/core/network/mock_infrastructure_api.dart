@@ -1086,6 +1086,12 @@ class MockInfrastructureApi implements InfrastructureApi {
 
   @override
   Future<void> deleteReport(String reportId) async {}
+
+  @override
+  Future<AiDetectionResult?> fetchAiAnalysis(String reportId) async {
+    // Mock: return null (no detections). Real data comes from backend ONNX.
+    return null;
+  }
 }
 
 class _DefectSeed {

@@ -9,8 +9,9 @@ import '../../../shared/report_payload.dart';
 import '../../../shared/ticket.dart';
 import '../../share/data/share_card_builder.dart';
 import '../../share/presentation/share_sheet.dart';
+import 'detection_overlay.dart';
 
-// ── Provider ──────────────────────────────────────────────────────────────────
+// ── Providers ────────────────────────────────────────────────────────────────────
 
 final _reportDetailProvider = FutureProvider.family<_DetailData, String>(
   (ref, reportId) async {
@@ -18,13 +19,18 @@ final _reportDetailProvider = FutureProvider.family<_DetailData, String>(
     final defect = await api.fetchDefect(reportId);
     final timeline = await api.fetchReportTimeline(reportId);
     ResolutionMedia? resolution;
+    AiDetectionResult? aiAnalysis;
     try {
       resolution = await api.fetchResolution(reportId);
+    } catch (_) {}
+    try {
+      aiAnalysis = await api.fetchAiAnalysis(reportId);
     } catch (_) {}
     return _DetailData(
       defect: defect,
       timeline: timeline,
       resolution: resolution,
+      aiAnalysis: aiAnalysis,
     );
   },
 );
@@ -33,11 +39,13 @@ class _DetailData {
   final NearbyDefect defect;
   final List<ReportEvent> timeline;
   final ResolutionMedia? resolution;
+  final AiDetectionResult? aiAnalysis;
 
   const _DetailData({
     required this.defect,
     required this.timeline,
     this.resolution,
+    this.aiAnalysis,
   });
 }
 
@@ -133,6 +141,21 @@ class ReportDetailPage extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // ── AI Image + Detection Overlay ──────────────────────
+                  if (data.defect.thumbnailUrl.isNotEmpty) ...[  
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: SizedBox(
+                        height: 240,
+                        child: DetectionOverlay(
+                          imageUrl: data.defect.thumbnailUrl,
+                          analysis: data.aiAnalysis,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+
                   // Report ID header
                   Text(
                     'Report #${reportId.substring(0, 8).toUpperCase()}',
@@ -149,8 +172,8 @@ class ReportDetailPage extends ConsumerWidget {
                   _StatusRow(defect: data.defect),
                   const SizedBox(height: 20),
 
-                  // AI Verdict Chip (mocked)
-                  _AiVerdictCard(reportId: reportId),
+                  // AI Analysis Card (real ONNX data)
+                  _AiAnalysisCard(aiAnalysis: data.aiAnalysis),
                   const SizedBox(height: 16),
 
                   // Watermark Trust Badge
@@ -168,6 +191,23 @@ class ReportDetailPage extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 20),
+
+                  // AI Detection List (bounding box details)
+                  if (data.aiAnalysis != null && data.aiAnalysis!.hasDetections) ...[
+                    const Text(
+                      'AI DETECTED DEFECTS',
+                      style: TextStyle(
+                        color: Color(0xFF64748B),
+                        fontFamily: 'Inter',
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    AiDetectionList(analysis: data.aiAnalysis!),
+                    const SizedBox(height: 20),
+                  ],
 
                   // Audit Timeline
                   _AuditTimeline(events: data.timeline),
@@ -279,78 +319,354 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
-class _AiVerdictCard extends StatelessWidget {
-  final String reportId;
+// ── Real ONNX AI Analysis Card ────────────────────────────────────────────────
 
-  const _AiVerdictCard({required this.reportId});
+class _AiAnalysisCard extends StatelessWidget {
+  final AiDetectionResult? aiAnalysis;
+
+  const _AiAnalysisCard({this.aiAnalysis});
 
   @override
   Widget build(BuildContext context) {
-    // Seeded demo value based on reportId
-    final confidence = 79 + (reportId.codeUnitAt(0) % 20);
+    // No analysis available yet
+    if (aiAnalysis == null) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E293B),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFF334155)),
+        ),
+        child: const Row(
+          children: [
+            SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Color(0xFF4F46E5),
+              ),
+            ),
+            SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                'AI analysis pending — running ONNX inference…',
+                style: TextStyle(
+                  color: Color(0xFF94A3B8),
+                  fontFamily: 'Inter',
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final sev = aiAnalysis!.severity;
+    final (sevColor, sevIcon) = switch (sev?.severityLabel) {
+      'critical' => (const Color(0xFFFF3B3B), Icons.warning_rounded),
+      'high'     => (const Color(0xFFFF6B35), Icons.error_outline_rounded),
+      'medium'   => (const Color(0xFFFFD93D), Icons.info_outline_rounded),
+      _          => (const Color(0xFF6BCB77), Icons.check_circle_outline_rounded),
+    };
+
+    final detCount = aiAnalysis!.detectionCount;
+    final primaryClass = sev?.primaryClass;
+    final confidence = sev?.primaryConfidence;
+
+    // Display name for primary class
+    const classNames = {
+      'D00_Longitudinal_Crack': 'Longitudinal Crack',
+      'D10_Transverse_Crack':   'Transverse Crack',
+      'D20_Alligator_Crack':    'Alligator Crack',
+      'D30_Other_Corruption':   'Road Corruption',
+      'D40_Pothole':            'Pothole',
+    };
+    final displayClass = primaryClass != null
+        ? (classNames[primaryClass] ?? primaryClass.replaceAll('_', ' '))
+        : 'No defect detected';
 
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
           colors: [
-            const Color(0xFF4F46E5).withOpacity(0.15),
-            const Color(0xFF0D9488).withOpacity(0.1),
+            sevColor.withOpacity(0.12),
+            const Color(0xFF0D1B2A),
           ],
         ),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: const Color(0xFF4F46E5).withOpacity(0.3)),
+        border: Border.all(color: sevColor.withOpacity(0.35)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: const Color(0xFF4F46E5).withOpacity(0.2),
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(Icons.psychology_rounded,
-                color: Color(0xFF818CF8), size: 26),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'AI Verdict',
-                  style: TextStyle(
-                    color: Color(0xFF94A3B8),
-                    fontFamily: 'Inter',
-                    fontSize: 12,
-                  ),
+          // Header row
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: sevColor.withOpacity(0.15),
+                  shape: BoxShape.circle,
                 ),
-                Row(
+                child: Icon(Icons.psychology_rounded, color: sevColor, size: 24),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '$confidence% Confidence',
+                    const Text(
+                      'AI CRACK DETECTION',
                       style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurface,
+                        color: Color(0xFF64748B),
+                        fontFamily: 'Inter',
+                        fontWeight: FontWeight.w700,
+                        fontSize: 10,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      displayClass,
+                      style: TextStyle(
+                        color: sevColor,
                         fontFamily: 'Inter',
                         fontWeight: FontWeight.w700,
                         fontSize: 16,
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    const Text('Pothole',
-                        style: TextStyle(
-                          color: Color(0xFF818CF8),
-                          fontFamily: 'Inter',
-                          fontSize: 14,
-                        )),
                   ],
                 ),
-              ],
+              ),
+              // Severity badge
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: sevColor.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: sevColor.withOpacity(0.5)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(sevIcon, size: 13, color: sevColor),
+                    const SizedBox(width: 4),
+                    Text(
+                      (sev?.severityLabel ?? 'unknown').toUpperCase(),
+                      style: TextStyle(
+                        color: sevColor,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
+                        letterSpacing: 0.6,
+                        fontFamily: 'Inter',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // Metrics row
+          Row(
+            children: [
+              _MetricTile(
+                label: 'Confidence',
+                value: confidence != null
+                    ? '${(confidence * 100).toStringAsFixed(0)}%'
+                    : '—',
+                color: sevColor,
+              ),
+              const SizedBox(width: 12),
+              _MetricTile(
+                label: 'Defects Found',
+                value: '$detCount',
+                color: sevColor,
+              ),
+              const SizedBox(width: 12),
+              _MetricTile(
+                label: 'Severity Score',
+                value: sev != null ? '${sev.severityScore.toStringAsFixed(0)}/100' : '—',
+                color: sevColor,
+              ),
+            ],
+          ),
+
+          if (sev != null && sev.explanation.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              sev.explanation,
+              style: const TextStyle(
+                color: Color(0xFF94A3B8),
+                fontFamily: 'Inter',
+                fontSize: 12,
+              ),
+            ),
+          ],
+
+          // Model info footer
+          const SizedBox(height: 10),
+          const Text(
+            'YOLO11m ONNX · CivicLens Crack Detector v1',
+            style: TextStyle(
+              color: Color(0xFF334155),
+              fontFamily: 'Inter',
+              fontSize: 10,
+              letterSpacing: 0.5,
             ),
           ),
         ],
       ),
+    );
+  }
+}
+
+class _MetricTile extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+
+  const _MetricTile({required this.label, required this.value, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.07),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withOpacity(0.2)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              value,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+                fontFamily: 'Inter',
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Color(0xFF64748B),
+                fontSize: 10,
+                fontFamily: 'Inter',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── AI Detection List (inline, no separate file needed) ───────────────────────
+
+class AiDetectionList extends StatelessWidget {
+  final AiDetectionResult analysis;
+
+  const AiDetectionList({super.key, required this.analysis});
+
+  static const _classColors = {
+    'D00_Longitudinal_Crack': Color(0xFFFF6B35),
+    'D10_Transverse_Crack':   Color(0xFFFFD93D),
+    'D20_Alligator_Crack':    Color(0xFFFF3B3B),
+    'D30_Other_Corruption':   Color(0xFF6BCB77),
+    'D40_Pothole':            Color(0xFFE040FB),
+  };
+
+  static const _classDisplayNames = {
+    'D00_Longitudinal_Crack': 'Longitudinal Crack',
+    'D10_Transverse_Crack':   'Transverse Crack',
+    'D20_Alligator_Crack':    'Alligator Crack',
+    'D30_Other_Corruption':   'Road Corruption',
+    'D40_Pothole':            'Pothole',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: analysis.detections.map((det) {
+        final color = _classColors[det.className] ?? const Color(0xFF00E5FF);
+        final name  = _classDisplayNames[det.className]
+            ?? det.className.replaceAll('_', ' ');
+        final bb = det.boundingBox;
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.07),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: color.withOpacity(0.3)),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                        fontFamily: 'Inter',
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'BBox: (${bb.x1},${bb.y1}) → (${bb.x2},${bb.y2})  •  '
+                      '${bb.width}×${bb.height}px',
+                      style: const TextStyle(
+                        color: Color(0xFF475569),
+                        fontSize: 10,
+                        fontFamily: 'Inter',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.18),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '${(det.confidence * 100).toStringAsFixed(1)}%',
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    fontFamily: 'Inter',
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 }

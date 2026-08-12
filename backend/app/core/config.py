@@ -55,6 +55,8 @@ class Settings(BaseSettings):
     MODEL_CONFIDENCE_THRESHOLD: float = 0.25
     MODEL_IOU_THRESHOLD: float = 0.45
     MODEL_PROVIDER: str = "CPUExecutionProvider"
+    # Set this to a Supabase Storage URL for Railway production (model downloaded on cold start)
+    MODEL_DOWNLOAD_URL: str | None = None
 
     # Rate Limiter
     RATE_LIMIT_ENABLED: bool = True

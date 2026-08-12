@@ -512,13 +512,56 @@ async def upload_infrastructure_report(request: Request, db: AsyncSession = Depe
                 except Exception:
                     captured_dt = datetime.now(timezone.utc)
 
+            # ── Run ONNX inference on the uploaded image ────────────────────
+            ai_conf = None
+            ai_lbl = None
+            ai_sev = None
+            ai_det_json = None
+            ai_log_id = None
+
+            if file_bytes:
+                try:
+                    from app.modules.ai.dependencies import get_inference_engine
+                    from app.modules.ai.severity import compute_severity, severity_to_readable
+
+                    engine = get_inference_engine()
+                    if engine is not None:
+                        raw = engine.detect(file_bytes)
+                        dets = raw.get("detections", [])
+                        sev_result = compute_severity(
+                            dets,
+                            image_width=raw["image"]["width"],
+                            image_height=raw["image"]["height"],
+                        )
+                        ai_conf = sev_result["primary_confidence"]
+                        ai_lbl = severity_to_readable(
+                            sev_result["primary_class"], sev_result["primary_confidence"]
+                        )
+                        ai_sev = sev_result["severity_label"]
+                        # Store full detection JSON (bounding boxes) for Flutter
+                        ai_det_json = {
+                            "status": raw["status"],
+                            "model": raw["model"],
+                            "image": raw["image"],
+                            "detections": dets,
+                            "detection_count": raw["detection_count"],
+                            "timing_ms": raw["timing_ms"],
+                            "severity": sev_result,
+                        }
+                        logger.info(
+                            f"[REPORT UPLOAD] ONNX inference: {raw['detection_count']} detections, "
+                            f"severity={ai_sev}, label={ai_lbl}"
+                        )
+                except Exception as onnx_err:
+                    logger.warning(f"[REPORT UPLOAD] ONNX inference failed (non-fatal): {onnx_err}")
+
             civic_rep = CivicReport(
                 id=report_uuid,
                 client_id=payload.id,
                 user_id=str(payload.user_id),
                 is_guest=payload.is_guest,
                 category=payload.category,
-                severity=payload.severity,
+                severity=ai_sev or payload.severity,
                 description=payload.description,
                 latitude=payload.capture.latitude,
                 longitude=payload.capture.longitude,
@@ -533,8 +576,11 @@ async def upload_infrastructure_report(request: Request, db: AsyncSession = Depe
                 status="submitted",
                 contractor_id=payload.contractor_id,
                 infrastructure_id=payload.infrastructure_id,
-                ai_confidence=0.94,
-                ai_label=f"{payload.category.replace('_', ' ').title()} Defect",
+                ai_confidence=ai_conf,
+                ai_label=ai_lbl or f"{payload.category.replace('_', ' ').title()} Defect",
+                ai_severity=ai_sev,
+                ai_detections=ai_det_json,
+                ai_inference_log_id=str(ai_log_id) if ai_log_id else None,
                 civic_score_delta=10
             )
             db.add(civic_rep)
@@ -632,6 +678,94 @@ async def fetch_defect(report_id: str):
     if not defect:
         raise HTTPException(status_code=404, detail="Defect not found")
     return defect
+
+@router.get("/reports/{report_id}/ai-analysis")
+async def get_ai_analysis(report_id: str, db: AsyncSession = Depends(get_db_session)):
+    """
+    Returns the stored ONNX AI detection results for a specific report.
+
+    Response includes:
+      - detection_count: how many defects found
+      - detections: list of {class_id, class_name, confidence, bounding_box}
+      - severity: {severity_label, severity_score, explanation, primary_class}
+      - model info and timing
+
+    Flutter uses bounding_box coords (x1, y1, x2, y2 in original image space)
+    to draw overlay rectangles on the report image.
+    """
+    from app.modules.reports.model import CivicReport
+    stmt = select(CivicReport).where(
+        (CivicReport.client_id == report_id) | (CivicReport.id == report_id)
+    )
+    res = await db.execute(stmt)
+    report = res.scalar_one_or_none()
+
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    if report.ai_detections:
+        return report.ai_detections
+
+    # No stored detections — try to re-run inference if image is available
+    if report.image_url and report.image_url.startswith("http"):
+        try:
+            import httpx
+            from app.modules.ai.dependencies import get_inference_engine
+            from app.modules.ai.severity import compute_severity, severity_to_readable
+            from sqlalchemy import update as sql_update
+            from datetime import timezone as tz
+
+            engine = get_inference_engine()
+            if engine:
+                async with httpx.AsyncClient(timeout=30) as client:
+                    img_response = await client.get(report.image_url)
+                img_bytes = img_response.content
+
+                raw = engine.detect(img_bytes)
+                dets = raw.get("detections", [])
+                sev = compute_severity(dets, raw["image"]["width"], raw["image"]["height"])
+
+                ai_det_json = {
+                    "status": raw["status"],
+                    "model": raw["model"],
+                    "image": raw["image"],
+                    "detections": dets,
+                    "detection_count": raw["detection_count"],
+                    "timing_ms": raw["timing_ms"],
+                    "severity": sev,
+                }
+
+                # Persist results for future calls
+                await db.execute(
+                    sql_update(CivicReport)
+                    .where(CivicReport.id == report.id)
+                    .values(
+                        ai_detections=ai_det_json,
+                        ai_confidence=sev["primary_confidence"],
+                        ai_label=severity_to_readable(sev["primary_class"], sev["primary_confidence"]),
+                        ai_severity=sev["severity_label"],
+                    )
+                )
+                await db.commit()
+                return ai_det_json
+        except Exception as retry_err:
+            logger.warning(f"[AI Analysis] Re-inference failed for report {report_id}: {retry_err}")
+
+    # Return empty result if no inference available
+    return {
+        "status": "no_inference",
+        "message": "No AI analysis available for this report. Re-upload the image to trigger detection.",
+        "detection_count": 0,
+        "detections": [],
+        "severity": {
+            "severity_label": report.severity or "unknown",
+            "severity_score": 0.0,
+            "explanation": "AI analysis not yet performed for this report.",
+        },
+        "ai_confidence": report.ai_confidence,
+        "ai_label": report.ai_label,
+    }
+
 
 @router.get("/defects/duplicates", response_model=List[DuplicateMatchSchema])
 async def check_duplicates(lat: float, lng: float, radius_m: float):
@@ -1214,6 +1348,9 @@ async def fetch_my_reports(
                 "verification_status": verification_status,
                 "confidence_score": confidence_score,
                 "identity_note": identity_note,
+                # AI detection results (bounding boxes for Flutter overlay)
+                "ai_severity": r.ai_severity or r.severity,
+                "ai_detections": r.ai_detections,
             })
         return results
     except Exception as e:

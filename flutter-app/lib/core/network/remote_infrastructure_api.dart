@@ -338,4 +338,19 @@ class RemoteInfrastructureApi implements InfrastructureApi {
   Future<void> deleteReport(String reportId) async {
     await dio.delete('/v1/reports/$reportId');
   }
+
+  @override
+  Future<AiDetectionResult?> fetchAiAnalysis(String reportId) async {
+    try {
+      final response = await dio.get('/v1/reports/$reportId/ai-analysis');
+      if (response.statusCode == 200 && response.data is Map<String, dynamic>) {
+        final data = response.data as Map<String, dynamic>;
+        if (data['status'] == 'no_inference') return null;
+        return AiDetectionResult.fromJson(data);
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
 }
