@@ -485,7 +485,14 @@ class _DraftCard extends ConsumerWidget {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: () => _showReportDetailModal(context, item),
+          onTap: () {
+            if (item.syncState == SyncState.synced) {
+              final reportId = item.payload.infrastructureId ?? item.payload.id;
+              context.push('/report/detail/$reportId');
+            } else {
+              _showReportDetailModal(context, item);
+            }
+          },
           borderRadius: BorderRadius.circular(16),
           child: Container(
             margin: const EdgeInsets.only(bottom: 10),
