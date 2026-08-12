@@ -1,5 +1,6 @@
 import os
 import uuid
+import logging
 
 from fastapi import HTTPException, UploadFile
 from loguru import logger
@@ -7,11 +8,15 @@ from loguru import logger
 from app.modules.reports.model import CivicReport
 from app.modules.reports.repository import ReportsRepository
 from app.modules.reports.schema import ReportCreate, ReportResponse
+from app.modules.ai.severity import compute_severity, severity_to_readable
+
+inference_logger = logging.getLogger("civiclens.reports.inference")
 
 
 class ReportsService:
-    def __init__(self, repo: ReportsRepository):
+    def __init__(self, repo: ReportsRepository, inference_engine=None):
         self.repo = repo
+        self.inference_engine = inference_engine
 
     async def submit_report(
         self,
@@ -37,6 +42,16 @@ class ReportsService:
                 detail="Image file is mandatory for report submission."
             )
 
+        # Read once for inference, then rewind so the existing storage uploader
+        # receives the exact original file bytes.
+        image_bytes = await image.read()
+        if not image_bytes:
+            raise HTTPException(status_code=400, detail="Image file is empty.")
+        await image.seek(0)
+
+        ai_result = self._analyse_image(image_bytes)
+        address = await self._resolve_address(data.capture.latitude, data.capture.longitude)
+
         logger.info(
             f"[Reports] 📷 Uploading mandatory image for client_id={data.id} "
             f"filename={image.filename} content_type={image.content_type}"
@@ -54,7 +69,7 @@ class ReportsService:
             )
 
         # ── Persist report to DB ─────────────────────────────────────────────
-        report = await self.repo.create(data, image_url)
+        report = await self.repo.create(data, image_url, ai_result=ai_result)
         logger.info(
             f"[Reports] ✅ Report saved to Neon DB | "
             f"report_id={report.id} category={report.category} "
@@ -63,7 +78,54 @@ class ReportsService:
             f"image={image_url} "
             f"user_id={data.user_id} is_guest={data.is_guest}"
         )
-        return self._to_response(report)
+        return self._to_response(report, address=address)
+
+    def _analyse_image(self, image_bytes: bytes) -> dict | None:
+        """Run the configured ONNX detector without rejecting a valid report on ML failure."""
+        if self.inference_engine is None:
+            inference_logger.warning("[Reports] ONNX engine unavailable; report saved without AI result")
+            return None
+
+        try:
+            inference_logger.info("[Reports] ONNX inference started for uploaded report image")
+            detection = self.inference_engine.detect(image_bytes)
+            severity = compute_severity(
+                detection["detections"],
+                detection["image"]["width"],
+                detection["image"]["height"],
+            )
+            detection["severity"] = severity
+            inference_logger.info(
+                "[Reports] ONNX inference completed detections=%s severity=%s confidence=%s total_ms=%s",
+                detection["detection_count"],
+                severity["severity_label"],
+                severity["primary_confidence"],
+                detection["timing_ms"]["total"],
+            )
+            return {
+                "ai_confidence": severity["primary_confidence"],
+                "ai_label": severity_to_readable(
+                    severity["primary_class"], severity["primary_confidence"]
+                ),
+                "ai_severity": severity["severity_label"],
+                "ai_detections": detection,
+            }
+        except Exception as exc:
+            # Storage and civic reporting remain available if model hosting/runtime
+            # is temporarily unavailable. The absence of AI fields is explicit.
+            inference_logger.exception("[Reports] ONNX inference failed: %s", exc)
+            return None
+
+    async def _resolve_address(self, latitude: float, longitude: float) -> str | None:
+        """Resolve captured coordinates to a real place name via the existing OSM provider."""
+        try:
+            from app.modules.infrastructure_identity.providers import registry
+
+            location = await registry.reverse_geocode(latitude, longitude)
+            return location.get("address") if location else None
+        except Exception as exc:
+            inference_logger.warning("[Reports] Reverse geocoding failed: %s", exc)
+            return None
 
     async def _upload_image(self, image: UploadFile, report_id: str) -> str | None:
         """
@@ -156,12 +218,15 @@ class ReportsService:
             pass
 
     @staticmethod
-    def _to_response(report: CivicReport) -> ReportResponse:
+    def _to_response(report: CivicReport, address: str | None = None) -> ReportResponse:
         return ReportResponse(
             report_id=str(report.id),
             status=report.status,
             ai_confidence=report.ai_confidence,
             ai_label=report.ai_label,
+            ai_severity=report.ai_severity,
+            ai_detections=report.ai_detections,
+            address=address,
             assigned_contractor_id=report.contractor_id,
             civic_score_delta=report.civic_score_delta,
             created_at_utc=report.created_at,

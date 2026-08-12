@@ -8,12 +8,13 @@ from app.infrastructure.database import get_db_session
 from app.modules.reports.repository import ReportsRepository
 from app.modules.reports.schema import ReportCreate, ReportResponse
 from app.modules.reports.service import ReportsService
+from app.modules.ai.dependencies import get_inference_engine
 
 router = APIRouter(prefix="/reports", tags=["Reports"])
 
 
 def get_reports_service(db: AsyncSession = Depends(get_db_session)) -> ReportsService:
-    return ReportsService(ReportsRepository(db))
+    return ReportsService(ReportsRepository(db), get_inference_engine())
 
 
 @router.post("", status_code=status.HTTP_201_CREATED, response_model=ReportResponse)
@@ -62,7 +63,8 @@ async def get_report(
     report = await service.repo.get_by_client_id(report_id)
     if not report:
         raise HTTPException(status_code=404, detail="Report not found")
-    return ReportsService._to_response(report)
+    address = await service._resolve_address(report.latitude, report.longitude)
+    return ReportsService._to_response(report, address=address)
 
 
 @router.delete("/{report_id}")

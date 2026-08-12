@@ -100,6 +100,15 @@ class DetectionTimingMs(BaseResponseSchema):
     total: float
 
 
+class DetectionSeverity(BaseResponseSchema):
+    severity_label: str
+    severity_score: float
+    primary_class: str | None = None
+    primary_confidence: float | None = None
+    explanation: str
+    detection_count: int
+
+
 class DetectionResult(BaseResponseSchema):
     """
     Full ONNX crack-detection result returned to Flutter and stored in DB.
@@ -111,6 +120,7 @@ class DetectionResult(BaseResponseSchema):
     detections: list[DetectionItem]
     detection_count: int
     timing_ms: DetectionTimingMs
+    severity: DetectionSeverity | None = None
     inference_log_id: uuid.UUID | None = None     # FK into ai_inference_logs
     annotated_image_url: str | None = None        # Supabase/MinIO URL if generated
     error_message: str | None = None

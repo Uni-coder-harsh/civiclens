@@ -142,7 +142,7 @@ class ReportDetailPage extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   // ── AI Image + Detection Overlay ──────────────────────
-                  if (data.defect.thumbnailUrl.isNotEmpty) ...[  
+                  if (data.defect.thumbnailUrl.isNotEmpty) ...[
                     ClipRRect(
                       borderRadius: BorderRadius.circular(14),
                       child: SizedBox(
@@ -174,6 +174,36 @@ class ReportDetailPage extends ConsumerWidget {
 
                   // AI Analysis Card (real ONNX data)
                   _AiAnalysisCard(aiAnalysis: data.aiAnalysis),
+                  const SizedBox(height: 10),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: OutlinedButton.icon(
+                      onPressed: () async {
+                        try {
+                          await ref
+                              .read(apiClientProvider)
+                              .retestAiAnalysis(reportId);
+                          ref.invalidate(_reportDetailProvider(reportId));
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content: Text('Crack detection retested.')),
+                            );
+                          }
+                        } catch (_) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                  content:
+                                      Text('Could not retest this report.')),
+                            );
+                          }
+                        }
+                      },
+                      icon: const Icon(Icons.refresh_rounded, size: 18),
+                      label: const Text('Retest crack detection'),
+                    ),
+                  ),
                   const SizedBox(height: 16),
 
                   // Watermark Trust Badge
@@ -193,7 +223,8 @@ class ReportDetailPage extends ConsumerWidget {
                   const SizedBox(height: 20),
 
                   // AI Detection List (bounding box details)
-                  if (data.aiAnalysis != null && data.aiAnalysis!.hasDetections) ...[
+                  if (data.aiAnalysis != null &&
+                      data.aiAnalysis!.hasDetections) ...[
                     const Text(
                       'AI DETECTED DEFECTS',
                       style: TextStyle(
@@ -366,9 +397,9 @@ class _AiAnalysisCard extends StatelessWidget {
     final sev = aiAnalysis!.severity;
     final (sevColor, sevIcon) = switch (sev?.severityLabel) {
       'critical' => (const Color(0xFFFF3B3B), Icons.warning_rounded),
-      'high'     => (const Color(0xFFFF6B35), Icons.error_outline_rounded),
-      'medium'   => (const Color(0xFFFFD93D), Icons.info_outline_rounded),
-      _          => (const Color(0xFF6BCB77), Icons.check_circle_outline_rounded),
+      'high' => (const Color(0xFFFF6B35), Icons.error_outline_rounded),
+      'medium' => (const Color(0xFFFFD93D), Icons.info_outline_rounded),
+      _ => (const Color(0xFF6BCB77), Icons.check_circle_outline_rounded),
     };
 
     final detCount = aiAnalysis!.detectionCount;
@@ -378,10 +409,10 @@ class _AiAnalysisCard extends StatelessWidget {
     // Display name for primary class
     const classNames = {
       'D00_Longitudinal_Crack': 'Longitudinal Crack',
-      'D10_Transverse_Crack':   'Transverse Crack',
-      'D20_Alligator_Crack':    'Alligator Crack',
-      'D30_Other_Corruption':   'Road Corruption',
-      'D40_Pothole':            'Pothole',
+      'D10_Transverse_Crack': 'Transverse Crack',
+      'D20_Alligator_Crack': 'Alligator Crack',
+      'D30_Other_Corruption': 'Road Corruption',
+      'D40_Pothole': 'Pothole',
     };
     final displayClass = primaryClass != null
         ? (classNames[primaryClass] ?? primaryClass.replaceAll('_', ' '))
@@ -414,7 +445,8 @@ class _AiAnalysisCard extends StatelessWidget {
                   color: sevColor.withOpacity(0.15),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(Icons.psychology_rounded, color: sevColor, size: 24),
+                child:
+                    Icon(Icons.psychology_rounded, color: sevColor, size: 24),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -446,7 +478,8 @@ class _AiAnalysisCard extends StatelessWidget {
               ),
               // Severity badge
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: sevColor.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(20),
@@ -493,7 +526,9 @@ class _AiAnalysisCard extends StatelessWidget {
               const SizedBox(width: 12),
               _MetricTile(
                 label: 'Severity Score',
-                value: sev != null ? '${sev.severityScore.toStringAsFixed(0)}/100' : '—',
+                value: sev != null
+                    ? '${sev.severityScore.toStringAsFixed(0)}/100'
+                    : '—',
                 color: sevColor,
               ),
             ],
@@ -533,7 +568,8 @@ class _MetricTile extends StatelessWidget {
   final String value;
   final Color color;
 
-  const _MetricTile({required this.label, required this.value, required this.color});
+  const _MetricTile(
+      {required this.label, required this.value, required this.color});
 
   @override
   Widget build(BuildContext context) {
@@ -582,18 +618,18 @@ class AiDetectionList extends StatelessWidget {
 
   static const _classColors = {
     'D00_Longitudinal_Crack': Color(0xFFFF6B35),
-    'D10_Transverse_Crack':   Color(0xFFFFD93D),
-    'D20_Alligator_Crack':    Color(0xFFFF3B3B),
-    'D30_Other_Corruption':   Color(0xFF6BCB77),
-    'D40_Pothole':            Color(0xFFE040FB),
+    'D10_Transverse_Crack': Color(0xFFFFD93D),
+    'D20_Alligator_Crack': Color(0xFFFF3B3B),
+    'D30_Other_Corruption': Color(0xFF6BCB77),
+    'D40_Pothole': Color(0xFFE040FB),
   };
 
   static const _classDisplayNames = {
     'D00_Longitudinal_Crack': 'Longitudinal Crack',
-    'D10_Transverse_Crack':   'Transverse Crack',
-    'D20_Alligator_Crack':    'Alligator Crack',
-    'D30_Other_Corruption':   'Road Corruption',
-    'D40_Pothole':            'Pothole',
+    'D10_Transverse_Crack': 'Transverse Crack',
+    'D20_Alligator_Crack': 'Alligator Crack',
+    'D30_Other_Corruption': 'Road Corruption',
+    'D40_Pothole': 'Pothole',
   };
 
   @override
@@ -601,8 +637,8 @@ class AiDetectionList extends StatelessWidget {
     return Column(
       children: analysis.detections.map((det) {
         final color = _classColors[det.className] ?? const Color(0xFF00E5FF);
-        final name  = _classDisplayNames[det.className]
-            ?? det.className.replaceAll('_', ' ');
+        final name = _classDisplayNames[det.className] ??
+            det.className.replaceAll('_', ' ');
         final bb = det.boundingBox;
 
         return Container(
@@ -697,7 +733,8 @@ class _WatermarkBadge extends StatelessWidget {
                 : Icons.help_outline_rounded,
             color: watermarkVerified
                 ? const Color(0xFF22C55E)
-                : Theme.of(context).textTheme.bodyMedium?.color ?? const Color(0xFF64748B),
+                : Theme.of(context).textTheme.bodyMedium?.color ??
+                    const Color(0xFF64748B),
             size: 20,
           ),
           const SizedBox(width: 12),
@@ -712,7 +749,8 @@ class _WatermarkBadge extends StatelessWidget {
                   style: TextStyle(
                     color: watermarkVerified
                         ? const Color(0xFF22C55E)
-                        : Theme.of(context).textTheme.bodySmall?.color ?? const Color(0xFF94A3B8),
+                        : Theme.of(context).textTheme.bodySmall?.color ??
+                            const Color(0xFF94A3B8),
                     fontFamily: 'Inter',
                     fontWeight: FontWeight.w600,
                     fontSize: 14,
@@ -885,7 +923,8 @@ class _AuditTimeline extends StatelessWidget {
                                 child: Text(
                                   _actionLabel(event.action),
                                   style: TextStyle(
-                                    color: Theme.of(context).colorScheme.onSurface,
+                                    color:
+                                        Theme.of(context).colorScheme.onSurface,
                                     fontFamily: 'Inter',
                                     fontWeight: FontWeight.w600,
                                     fontSize: 14,

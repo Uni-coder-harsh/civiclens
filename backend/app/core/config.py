@@ -55,8 +55,9 @@ class Settings(BaseSettings):
     MODEL_CONFIDENCE_THRESHOLD: float = 0.25
     MODEL_IOU_THRESHOLD: float = 0.45
     MODEL_PROVIDER: str = "CPUExecutionProvider"
-    # Set this to a Supabase Storage URL for Railway production (model downloaded on cold start)
-    MODEL_DOWNLOAD_URL: str | None = None
+    # HuggingFace public repo — downloaded automatically on Railway cold start
+    # Override with MODEL_DOWNLOAD_URL env var if needed
+    MODEL_DOWNLOAD_URL: str | None = "https://huggingface.co/Uni-coder-harsh45/civiclens-crack-detector/resolve/main/best.onnx"
 
     # Rate Limiter
     RATE_LIMIT_ENABLED: bool = True

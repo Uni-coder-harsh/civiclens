@@ -14,6 +14,7 @@ from PIL import Image
 from app.modules.ai.model import AIInferenceLog, AIModel, AIPrediction
 from app.modules.ai.repository import AIInferenceRepository, AIModelRepository, AIPredictionRepository
 from app.modules.ai.schema import AIModelCreate, AnalysisSubmit, DetectionResult
+from app.modules.ai.severity import compute_severity
 
 logger = logging.getLogger("civiclens.ai.service")
 
@@ -170,6 +171,7 @@ class AIService:
             logger.warning(f"[AIService] DB persistence failed (inference result still returned): {db_err}")
 
         # ── 3. Build response ─────────────────────────────────────────────────
+        severity = compute_severity(detections, orig_w, orig_h)
         return DetectionResult(
             status=raw["status"],
             model=raw["model"],
@@ -178,4 +180,5 @@ class AIService:
             detection_count=raw["detection_count"],
             timing_ms=raw["timing_ms"],
             inference_log_id=log_id,
+            severity=severity,
         )

@@ -889,7 +889,10 @@ class MockInfrastructureApi implements InfrastructureApi {
         ContractorSummary(
           contractorId: contractorId,
           companyName: contractorId.startsWith('ctr_')
-              ? contractorId.replaceAll('ctr_', '').replaceAll('_', ' ').toUpperCase()
+              ? contractorId
+                  .replaceAll('ctr_', '')
+                  .replaceAll('_', ' ')
+                  .toUpperCase()
               : 'Apex Infra Projects Ltd',
           grade: 4.7,
           activeDefects: 2,
@@ -1091,6 +1094,22 @@ class MockInfrastructureApi implements InfrastructureApi {
   Future<AiDetectionResult?> fetchAiAnalysis(String reportId) async {
     // Mock: return null (no detections). Real data comes from backend ONNX.
     return null;
+  }
+
+  @override
+  Future<AiDetectionResult> retestAiAnalysis(String reportId) async {
+    return AiDetectionResult.fromJson({
+      'status': 'completed',
+      'detections': [],
+      'detection_count': 0,
+      'image': {'width': 1, 'height': 1},
+      'severity': {
+        'severity_label': 'low',
+        'severity_score': 0.0,
+        'explanation': 'No mock detections available.',
+        'detection_count': 0,
+      },
+    });
   }
 }
 

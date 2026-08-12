@@ -27,7 +27,8 @@ class RemoteInfrastructureApi implements InfrastructureApi {
     final formData = FormData.fromMap({
       'payload': jsonEncode(payload.toJson()),
       if (fileExists)
-        'image': await MultipartFile.fromFile(imagePath, filename: 'defect_image.jpg'),
+        'image': await MultipartFile.fromFile(imagePath,
+            filename: 'defect_image.jpg'),
     });
 
     try {
@@ -352,5 +353,11 @@ class RemoteInfrastructureApi implements InfrastructureApi {
     } catch (_) {
       return null;
     }
+  }
+
+  @override
+  Future<AiDetectionResult> retestAiAnalysis(String reportId) async {
+    final response = await dio.post('/v1/reports/$reportId/ai-analysis/retest');
+    return AiDetectionResult.fromJson(response.data as Map<String, dynamic>);
   }
 }

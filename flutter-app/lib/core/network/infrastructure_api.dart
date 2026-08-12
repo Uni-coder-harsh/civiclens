@@ -114,4 +114,5 @@ abstract class InfrastructureApi {
 
   // AI Analysis
   Future<AiDetectionResult?> fetchAiAnalysis(String reportId);
+  Future<AiDetectionResult> retestAiAnalysis(String reportId);
 }

@@ -16,7 +16,12 @@ class ReportsRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    async def create(self, data: ReportCreate, image_url: str | None) -> CivicReport:
+    async def create(
+        self,
+        data: ReportCreate,
+        image_url: str | None,
+        ai_result: dict | None = None,
+    ) -> CivicReport:
         # ── Infrastructure Asset Proximity Linking & Deduplication ──────────
         infra_id = data.infrastructure_id
         if not infra_id:
@@ -69,6 +74,10 @@ class ReportsRepository:
             contractor_id=data.contractor_id,
             infrastructure_id=infra_id,
             sensor_data=data.parsed_sensor_data(),
+            ai_confidence=(ai_result or {}).get("ai_confidence"),
+            ai_label=(ai_result or {}).get("ai_label"),
+            ai_severity=(ai_result or {}).get("ai_severity"),
+            ai_detections=(ai_result or {}).get("ai_detections"),
             civic_score_delta=10,
         )
         self.db.add(report)

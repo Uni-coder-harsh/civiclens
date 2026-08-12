@@ -12,7 +12,7 @@ from fastapi import APIRouter, Query, status, HTTPException, Depends, Request, F
 from pydantic import BaseModel, Field
 from app.modules.integration.store import store
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_
 from app.infrastructure.database import get_db_session
 from app.modules.auth.model import User, Role, UserSession
 from app.modules.organizations.model import Organization, OrganizationMembership
@@ -64,6 +64,8 @@ class ReportResponseSchema(BaseModel):
     status: str
     ai_confidence: Optional[str] = None
     ai_label: Optional[str] = None
+    ai_severity: Optional[str] = None
+    ai_detections: Optional[dict] = None
     assigned_contractor_id: Optional[str] = None
     civic_score_delta: int
     created_at: str
@@ -637,7 +639,7 @@ async def upload_infrastructure_report(request: Request, db: AsyncSession = Depe
         "zone": "Pune Central",
         "thumbnail_url": image_url,
         "watermark_verified": True,
-        "ai_confidence": 0.92,
+        "ai_confidence": ai_conf or 0.0,
         "days_in_status": 0,
         "sla_clock": None,
         "assigned_contractor_id": payload.contractor_id
@@ -664,13 +666,69 @@ async def upload_infrastructure_report(request: Request, db: AsyncSession = Depe
     return {
         "report_id": payload.id,
         "status": "aiVerified",
-        "ai_confidence": "0.92",
-        "ai_label": payload.category,
+        "ai_confidence": str(ai_conf) if ai_conf is not None else None,
+        "ai_label": ai_lbl,
         "assigned_contractor_id": payload.contractor_id,
         "civic_score_delta": 15,
         "created_at": now_str,
         "sla_clock": None
     }
+
+
+async def _run_report_ai_analysis(report, db: AsyncSession, *, trigger: str) -> dict:
+    """Download a report image, run ONNX inference, and persist the real result."""
+    if not report.image_url or not report.image_url.startswith(("http://", "https://")):
+        raise ValueError("Report has no public image URL to analyse.")
+
+    from app.modules.ai.dependencies import get_inference_engine
+    from app.modules.ai.severity import compute_severity, severity_to_readable
+    import httpx
+
+    report_id = report.client_id or str(report.id)
+    logger.info(f"[AI Analysis] start report_id={report_id} trigger={trigger} image_url={report.image_url}")
+    engine = get_inference_engine()
+    if engine is None:
+        raise RuntimeError("ONNX inference engine is unavailable.")
+
+    async with httpx.AsyncClient(timeout=45.0, follow_redirects=True) as client:
+        image_response = await client.get(report.image_url)
+        image_response.raise_for_status()
+        image_bytes = image_response.content
+
+    if not image_bytes:
+        raise ValueError("Stored image is empty.")
+    if len(image_bytes) > 25 * 1024 * 1024:
+        raise ValueError("Stored image exceeds the 25 MB analysis limit.")
+
+    raw = engine.detect(image_bytes)
+    detections = raw.get("detections", [])
+    severity = compute_severity(
+        detections,
+        image_width=raw["image"]["width"],
+        image_height=raw["image"]["height"],
+    )
+    analysis = {
+        "status": raw["status"],
+        "model": raw["model"],
+        "image": raw["image"],
+        "detections": detections,
+        "detection_count": raw["detection_count"],
+        "timing_ms": raw["timing_ms"],
+        "severity": severity,
+    }
+    report.ai_detections = analysis
+    report.ai_confidence = severity["primary_confidence"]
+    report.ai_label = severity_to_readable(
+        severity["primary_class"], severity["primary_confidence"]
+    )
+    report.ai_severity = severity["severity_label"]
+    await db.flush()
+    logger.info(
+        f"[AI Analysis] completed report_id={report_id} trigger={trigger} "
+        f"detections={analysis['detection_count']} severity={report.ai_severity} "
+        f"confidence={report.ai_confidence} total_ms={raw['timing_ms']['total']}"
+    )
+    return analysis
 
 @router.get("/reports/{report_id}", response_model=NearbyDefectSchema)
 async def fetch_defect(report_id: str):
@@ -694,9 +752,13 @@ async def get_ai_analysis(report_id: str, db: AsyncSession = Depends(get_db_sess
     to draw overlay rectangles on the report image.
     """
     from app.modules.reports.model import CivicReport
-    stmt = select(CivicReport).where(
-        (CivicReport.client_id == report_id) | (CivicReport.id == report_id)
-    )
+
+    filters = [CivicReport.client_id == report_id]
+    try:
+        filters.append(CivicReport.id == uuid.UUID(report_id))
+    except ValueError:
+        pass
+    stmt = select(CivicReport).where(or_(*filters))
     res = await db.execute(stmt)
     report = res.scalar_one_or_none()
 
@@ -706,50 +768,13 @@ async def get_ai_analysis(report_id: str, db: AsyncSession = Depends(get_db_sess
     if report.ai_detections:
         return report.ai_detections
 
-    # No stored detections — try to re-run inference if image is available
-    if report.image_url and report.image_url.startswith("http"):
-        try:
-            import httpx
-            from app.modules.ai.dependencies import get_inference_engine
-            from app.modules.ai.severity import compute_severity, severity_to_readable
-            from sqlalchemy import update as sql_update
-            from datetime import timezone as tz
-
-            engine = get_inference_engine()
-            if engine:
-                async with httpx.AsyncClient(timeout=30) as client:
-                    img_response = await client.get(report.image_url)
-                img_bytes = img_response.content
-
-                raw = engine.detect(img_bytes)
-                dets = raw.get("detections", [])
-                sev = compute_severity(dets, raw["image"]["width"], raw["image"]["height"])
-
-                ai_det_json = {
-                    "status": raw["status"],
-                    "model": raw["model"],
-                    "image": raw["image"],
-                    "detections": dets,
-                    "detection_count": raw["detection_count"],
-                    "timing_ms": raw["timing_ms"],
-                    "severity": sev,
-                }
-
-                # Persist results for future calls
-                await db.execute(
-                    sql_update(CivicReport)
-                    .where(CivicReport.id == report.id)
-                    .values(
-                        ai_detections=ai_det_json,
-                        ai_confidence=sev["primary_confidence"],
-                        ai_label=severity_to_readable(sev["primary_class"], sev["primary_confidence"]),
-                        ai_severity=sev["severity_label"],
-                    )
-                )
-                await db.commit()
-                return ai_det_json
-        except Exception as retry_err:
-            logger.warning(f"[AI Analysis] Re-inference failed for report {report_id}: {retry_err}")
+    # Historical reports are analysed on first view when their public image exists.
+    try:
+        analysis = await _run_report_ai_analysis(report, db, trigger="on_demand")
+        await db.commit()
+        return analysis
+    except Exception as retry_err:
+        logger.warning(f"[AI Analysis] on-demand failed report_id={report_id}: {retry_err}")
 
     # Return empty result if no inference available
     return {
@@ -765,6 +790,64 @@ async def get_ai_analysis(report_id: str, db: AsyncSession = Depends(get_db_sess
         "ai_confidence": report.ai_confidence,
         "ai_label": report.ai_label,
     }
+
+
+@router.post("/reports/{report_id}/ai-analysis/retest")
+async def retest_ai_analysis(report_id: str, db: AsyncSession = Depends(get_db_session)):
+    """Force a fresh ONNX run for a report, replacing any older stored result."""
+    from app.modules.reports.model import CivicReport
+
+    filters = [CivicReport.client_id == report_id]
+    try:
+        filters.append(CivicReport.id == uuid.UUID(report_id))
+    except ValueError:
+        pass
+    stmt = select(CivicReport).where(or_(*filters))
+    report = (await db.execute(stmt)).scalar_one_or_none()
+    if not report:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    try:
+        analysis = await _run_report_ai_analysis(report, db, trigger="user_retest")
+        await db.commit()
+        return analysis
+    except Exception as exc:
+        await db.rollback()
+        logger.exception(f"[AI Analysis] retest failed report_id={report_id}: {exc}")
+        raise HTTPException(status_code=503, detail="Could not re-run crack detection for this report.")
+
+
+@router.post("/reports/ai-analysis/backfill")
+async def backfill_ai_analysis(
+    limit: int = Query(50, ge=1, le=100),
+    force: bool = Query(False),
+    db: AsyncSession = Depends(get_db_session),
+):
+    """Analyse historical reports with public image URLs; rerun all when force=true."""
+    from app.modules.reports.model import CivicReport
+
+    stmt = select(CivicReport).where(
+        CivicReport.image_url.is_not(None),
+        CivicReport.image_url.startswith("http"),
+    )
+    if not force:
+        stmt = stmt.where(CivicReport.ai_detections.is_(None))
+    reports = list((await db.execute(stmt.order_by(CivicReport.created_at.asc()).limit(limit))).scalars())
+
+    logger.info(f"[AI Backfill] started candidates={len(reports)} force={force} limit={limit}")
+    completed, failed = [], []
+    for report in reports:
+        report_id = report.client_id or str(report.id)
+        try:
+            await _run_report_ai_analysis(report, db, trigger="backfill")
+            completed.append(report_id)
+        except Exception as exc:
+            failed.append({"report_id": report_id, "error": str(exc)})
+            logger.warning(f"[AI Backfill] skipped report_id={report_id}: {exc}")
+
+    await db.commit()
+    logger.info(f"[AI Backfill] completed analysed={len(completed)} failed={len(failed)}")
+    return {"analysed": len(completed), "failed": failed, "report_ids": completed}
 
 
 @router.get("/defects/duplicates", response_model=List[DuplicateMatchSchema])
@@ -1258,6 +1341,20 @@ async def fetch_my_reports(
         res = await db.execute(stmt)
         reports_to_return = res.scalars().all()
 
+        backfilled = 0
+        for r in reports_to_return:
+            if r.ai_detections or not r.image_url or not r.image_url.startswith("http"):
+                continue
+            try:
+                await _run_report_ai_analysis(r, db, trigger="my_reports_backfill")
+                backfilled += 1
+            except Exception as ai_err:
+                report_key = r.client_id or str(r.id)
+                logger.warning(f"[AI Analysis] my-reports skipped report_id={report_key}: {ai_err}")
+        if backfilled:
+            await db.commit()
+            logger.info(f"[AI Analysis] my-reports analysed historical reports count={backfilled}")
+
         results = []
         for r in reports_to_return:
             created_str = r.created_at.isoformat() if r.created_at else datetime.now(timezone.utc).isoformat()
@@ -1328,8 +1425,8 @@ async def fetch_my_reports(
                 "civic_score_delta": r.civic_score_delta or 10,
                 "created_at": created_str,
                 "created_at_utc": created_str,
-                "ai_confidence": str(r.ai_confidence) if r.ai_confidence is not None else "0.92",
-                "ai_label": r.ai_label or r.category,
+                "ai_confidence": str(r.ai_confidence) if r.ai_confidence is not None else None,
+                "ai_label": r.ai_label,
                 "assigned_contractor_id": r.contractor_id or contractor_name,
                 "latitude": r.latitude,
                 "longitude": r.longitude,
@@ -2162,4 +2259,3 @@ async def upload_avatar(
             status_code=500,
             detail=f"Failed to upload avatar: {str(e)}"
         )
-

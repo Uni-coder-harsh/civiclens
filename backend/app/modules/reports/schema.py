@@ -44,6 +44,9 @@ class ReportResponse(BaseModel):
     status: str
     ai_confidence: float | None = None
     ai_label: str | None = None
+    ai_severity: str | None = None
+    ai_detections: dict | None = None
+    address: str | None = None
     assigned_contractor_id: str | None = None
     civic_score_delta: int = 10
     created_at_utc: datetime

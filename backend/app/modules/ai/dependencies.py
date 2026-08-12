@@ -35,9 +35,13 @@ def get_inference_engine():
 
     # Resolve ml-engine path relative to the backend working directory
     model_path = settings.MODEL_PATH
+    # dependencies.py lives at backend/app/modules/ai/.  Resolve configured
+    # relative paths from the repository root so ``ml-engine/best.onnx`` works
+    # both locally and after the Hugging Face fallback download.
+    project_root = os.path.dirname(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+    )
     if not os.path.isabs(model_path):
-        # Resolve relative to the project root (one level above backend/)
-        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
         model_path = os.path.join(project_root, model_path)
 
     # Add ml-engine to sys.path so the engine module is importable
@@ -50,10 +54,14 @@ def get_inference_engine():
         if not os.path.exists(model_path):
             download_url = settings.MODEL_DOWNLOAD_URL
             if download_url:
-                logger.info(f"[ONNXEngine] Model not found locally. Downloading from {download_url} ...")
+                logger.info(f"[ONNXEngine] Model not found locally. Downloading from HuggingFace CDN ...")
                 import urllib.request
+                import shutil
                 os.makedirs(os.path.dirname(model_path) or ".", exist_ok=True)
-                urllib.request.urlretrieve(download_url, model_path)
+                # Use urlopen so HTTP 302 redirects (HuggingFace CDN) are followed correctly
+                with urllib.request.urlopen(download_url, timeout=120) as response, \
+                     open(model_path, "wb") as out_file:
+                    shutil.copyfileobj(response, out_file)
                 logger.info(f"[ONNXEngine] Model downloaded to {model_path} ({os.path.getsize(model_path)//1024//1024} MB)")
             else:
                 logger.warning(f"[ONNXEngine] Model not found at {model_path} and MODEL_DOWNLOAD_URL is not set. Inference unavailable.")
