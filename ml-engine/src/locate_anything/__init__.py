@@ -276,14 +276,8 @@ class LocateAnythingEngine:
             )
         t_infer = time.perf_counter()
 
-        # ── Decode raw output ─────────────────────────────────────────────────
-        # Remove the input tokens from the generated output
-        generated_ids = output_ids[:, inputs["input_ids"].shape[1]:]
-        raw_text = self._processor.batch_decode(
-            generated_ids,
-            skip_special_tokens=False,  # keep grounding tokens
-            clean_up_tokenization_spaces=False,
-        )[0]
+        # NVIDIA's generate() returns the decoded output string directly
+        raw_text = output_ids
 
         logger.info(f"[LocateAnything] Raw output: {raw_text[:500]!r}")
 
