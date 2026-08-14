@@ -147,6 +147,19 @@ class LocateAnythingEngine:
         except Exception as e:
             logger.warning(f"[LocateAnything] Failed to patch Qwen2Config: {e}")
 
+        # Patch DynamicCache to restore the to_legacy_cache method for backward compatibility
+        try:
+            import transformers.cache_utils
+            if not hasattr(transformers.cache_utils.DynamicCache, "to_legacy_cache"):
+                def to_legacy_cache(self):
+                    legacy_cache = ()
+                    for layer_idx in range(len(self.key_cache)):
+                        legacy_cache += ((self.key_cache[layer_idx], self.value_cache[layer_idx]),)
+                    return legacy_cache
+                transformers.cache_utils.DynamicCache.to_legacy_cache = to_legacy_cache
+        except Exception as e:
+            logger.warning(f"[LocateAnything] Failed to patch DynamicCache: {e}")
+
         if self._loaded:
             logger.info("[LocateAnything] Already loaded, skipping.")
             return
