@@ -22,7 +22,7 @@ pip install --upgrade pip --quiet
 # Core ML dependencies for LocateAnything-3B
 echo "[3/5] Installing LocateAnything-3B dependencies..."
 pip install \
-    "transformers>=4.46.0" \
+    "transformers==4.46.3" \
     "accelerate>=0.34.0" \
     "Pillow>=10.0" \
     "torch>=2.3.0" \
