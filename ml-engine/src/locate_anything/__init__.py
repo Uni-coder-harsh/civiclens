@@ -147,7 +147,7 @@ class LocateAnythingEngine:
         except Exception as e:
             logger.warning(f"[LocateAnything] Failed to patch Qwen2Config: {e}")
 
-        # Patch DynamicCache to restore the to_legacy_cache method for backward compatibility
+        # Patch DynamicCache to restore both to_legacy_cache and from_legacy_cache methods for backward compatibility
         try:
             import transformers.cache_utils
             if not hasattr(transformers.cache_utils.DynamicCache, "to_legacy_cache"):
@@ -161,6 +161,28 @@ class LocateAnythingEngine:
                             legacy_cache += ((self.key_cache[layer_idx], self.value_cache[layer_idx]),)
                     return legacy_cache
                 transformers.cache_utils.DynamicCache.to_legacy_cache = to_legacy_cache
+
+            if not hasattr(transformers.cache_utils.DynamicCache, "from_legacy_cache"):
+                @classmethod
+                def from_legacy_cache(cls, past_key_values=None):
+                    cache = cls()
+                    if past_key_values is not None:
+                        if hasattr(cache, "layers"):
+                            from transformers.cache_utils import DynamicLayer
+                            cache.layers = []
+                            for layer_idx, (key, value) in enumerate(past_key_values):
+                                layer = DynamicLayer()
+                                layer.keys = key
+                                layer.values = value
+                                layer.is_initialized = True
+                                layer.dtype = key.dtype
+                                layer.device = key.device
+                                cache.layers.append(layer)
+                        else:
+                            cache.key_cache = [layer[0] for layer in past_key_values]
+                            cache.value_cache = [layer[1] for layer in past_key_values]
+                    return cache
+                transformers.cache_utils.DynamicCache.from_legacy_cache = from_legacy_cache
         except Exception as e:
             logger.warning(f"[LocateAnything] Failed to patch DynamicCache: {e}")
 
