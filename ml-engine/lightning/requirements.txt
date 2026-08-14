@@ -8,6 +8,9 @@ transformers>=4.46.0
 accelerate>=0.34.0
 einops
 sentencepiece
+opencv-python-headless
+decord
+lmdb
 
 # Image processing
 Pillow>=10.0

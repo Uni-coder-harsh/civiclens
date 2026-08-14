@@ -29,6 +29,9 @@ pip install \
     "torchvision" \
     "sentencepiece" \
     "einops" \
+    "opencv-python-headless" \
+    "decord" \
+    "lmdb" \
     --quiet
 
 # Inference service dependencies
