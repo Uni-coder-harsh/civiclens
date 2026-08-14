@@ -32,6 +32,7 @@ pip install \
     "opencv-python-headless" \
     "decord" \
     "lmdb" \
+    "peft" \
     "numpy<2.0.0" \
     --quiet
 
