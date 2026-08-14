@@ -60,6 +60,175 @@ class LocateAnythingEngine:
         self._loaded = False
         self._load_time_ms: float = 0.0
 
+def apply_patches() -> None:
+    """
+    Apply runtime patches for HF transformers version compatibility dynamically.
+    Called automatically on module import.
+    """
+    import inspect
+    import torch
+    import transformers.modeling_utils
+    import transformers.cache_utils
+    import transformers.dynamic_module_utils
+
+    # 1. Patch get_class_from_dynamic_module to wrap subclasses of PreTrainedModel
+    # and filter out allow_all_kernels keyword arguments in _check_and_adjust_attn_implementation.
+    if not getattr(transformers.dynamic_module_utils.get_class_from_dynamic_module, "_is_patched", False):
+        orig_get_class = transformers.dynamic_module_utils.get_class_from_dynamic_module
+        def patched_get_class(*args, **kwargs):
+            cls = orig_get_class(*args, **kwargs)
+            for c in cls.__mro__:
+                if "_check_and_adjust_attn_implementation" in c.__dict__:
+                    orig_func = c._check_and_adjust_attn_implementation
+                    if not getattr(orig_func, "_is_patched", False):
+                        def make_wrapper(fn):
+                            def wrapper(self, *w_args, **w_kwargs):
+                                try:
+                                    attn_impl = w_kwargs.get("attn_implementation", w_args[0] if len(w_args) > 0 else None)
+                                    is_init = w_kwargs.get("is_init_check", w_args[1] if len(w_args) > 1 else False)
+                                    return fn(self, attn_impl, is_init)
+                                except Exception:
+                                    w_kwargs.pop("allow_all_kernels", None)
+                                    return fn(self, *w_args, **w_kwargs)
+                            wrapper._is_patched = True
+                            return wrapper
+                        c._check_and_adjust_attn_implementation = make_wrapper(orig_func)
+            return cls
+        patched_get_class._is_patched = True
+        transformers.dynamic_module_utils.get_class_from_dynamic_module = patched_get_class
+
+    # 2. Patch PreTrainedModel.__init__ to wrap _check_and_adjust_attn_implementation for static loaded classes
+    if not getattr(transformers.modeling_utils.PreTrainedModel.__init__, "_is_patched", False):
+        original_init = transformers.modeling_utils.PreTrainedModel.__init__
+        def patched_init(self, *args, **kwargs):
+            if hasattr(self, "_check_and_adjust_attn_implementation"):
+                original_method = self._check_and_adjust_attn_implementation
+                if not getattr(original_method, "_is_patched", False):
+                    def safe_check_and_adjust(*m_args, **m_kwargs):
+                        try:
+                            attn_impl = m_kwargs.get("attn_implementation", m_args[0] if len(m_args) > 0 else None)
+                            is_init = m_kwargs.get("is_init_check", m_args[1] if len(m_args) > 1 else False)
+                            return original_method(attn_impl, is_init)
+                        except Exception:
+                            m_kwargs.pop("allow_all_kernels", None)
+                            return original_method(*m_args, **m_kwargs)
+                    safe_check_and_adjust._is_patched = True
+                    self._check_and_adjust_attn_implementation = safe_check_and_adjust
+            return original_init(self, *args, **kwargs)
+        patched_init._is_patched = True
+        transformers.modeling_utils.PreTrainedModel.__init__ = patched_init
+
+    # 3. Patch get_expanded_tied_weights_keys to convert legacy list keys to dict keys
+    if not getattr(transformers.modeling_utils.PreTrainedModel.get_expanded_tied_weights_keys, "_is_patched", False):
+        original_get_tied_keys = transformers.modeling_utils.PreTrainedModel.get_expanded_tied_weights_keys
+        def patched_get_tied_keys(self, *args, **kwargs):
+            if hasattr(self, "_tied_weights_keys"):
+                val = self._tied_weights_keys
+                if isinstance(val, list):
+                    tied_dict = {}
+                    embed_name = "model.embed_tokens.weight"
+                    try:
+                        for name, _ in self.named_parameters():
+                            if "embed_tokens.weight" in name or "wte.weight" in name:
+                                embed_name = name
+                                break
+                    except Exception:
+                        pass
+                    for k in val:
+                        if k == "lm_head.weight":
+                            tied_dict[k] = embed_name
+                        else:
+                            tied_dict[k] = k
+                    self.__dict__["_tied_weights_keys"] = tied_dict
+            return original_get_tied_keys(self, *args, **kwargs)
+        patched_get_tied_keys._is_patched = True
+        transformers.modeling_utils.PreTrainedModel.get_expanded_tied_weights_keys = patched_get_tied_keys
+
+    # 4. Patch all_tied_weights_keys property on PreTrainedModel to dynamically resolve on demand
+    def get_all_tied_keys(self):
+        if "all_tied_weights_keys" not in self.__dict__:
+            try:
+                self.__dict__["all_tied_weights_keys"] = self.get_expanded_tied_weights_keys(all_submodels=False)
+            except Exception:
+                self.__dict__["all_tied_weights_keys"] = []
+        return self.__dict__["all_tied_weights_keys"]
+
+    def set_all_tied_keys(self, val):
+        self.__dict__["all_tied_weights_keys"] = val
+
+    transformers.modeling_utils.PreTrainedModel.all_tied_weights_keys = property(
+        fget=get_all_tied_keys,
+        fset=set_all_tied_keys
+    )
+
+    # 5. Patch Qwen2Config to support rope_theta property
+    try:
+        from transformers import Qwen2Config
+        Qwen2Config.rope_theta = property(
+            fget=lambda self: getattr(self, "_rope_theta_val", 1000000.0),
+            fset=lambda self, val: setattr(self, "_rope_theta_val", val)
+        )
+    except Exception as e:
+        logger.warning(f"[LocateAnything] Failed to patch Qwen2Config: {e}")
+
+    # 6. Patch DynamicCache to restore both to_legacy_cache and from_legacy_cache methods
+    if not hasattr(transformers.cache_utils.DynamicCache, "to_legacy_cache"):
+        def to_legacy_cache(self):
+            legacy_cache = ()
+            if hasattr(self, "layers"):
+                for layer in self.layers:
+                    legacy_cache += ((layer.keys, layer.values),)
+            else:
+                for layer_idx in range(len(getattr(self, "key_cache", []))):
+                    legacy_cache += ((self.key_cache[layer_idx], self.value_cache[layer_idx]),)
+            return legacy_cache
+        transformers.cache_utils.DynamicCache.to_legacy_cache = to_legacy_cache
+
+    if not hasattr(transformers.cache_utils.DynamicCache, "from_legacy_cache"):
+        @classmethod
+        def from_legacy_cache(cls, past_key_values=None):
+            cache = cls()
+            if past_key_values is not None:
+                if hasattr(cache, "layers"):
+                    from transformers.cache_utils import DynamicLayer
+                    cache.layers = []
+                    for layer_idx, (key, value) in enumerate(past_key_values):
+                        layer = DynamicLayer()
+                        layer.keys = key
+                        layer.values = value
+                        layer.is_initialized = True
+                        layer.dtype = key.dtype
+                        layer.device = key.device
+                        cache.layers.append(layer)
+                else:
+                    cache.key_cache = [layer[0] for layer in past_key_values]
+                    cache.value_cache = [layer[1] for layer in past_key_values]
+            return cache
+        transformers.cache_utils.DynamicCache.from_legacy_cache = from_legacy_cache
+
+
+# Run patches immediately at import time!
+try:
+    apply_patches()
+except Exception as e:
+    logger.warning(f"[LocateAnything] Failed to apply runtime patches on import: {e}")
+
+
+class LocateAnythingEngine:
+    """
+    Wraps nvidia/LocateAnything-3B for CivicLens crack/damage localization.
+    Loaded ONCE at service startup and kept in GPU memory.
+    """
+
+    def __init__(self, device: str = "cuda", dtype_str: str = "bfloat16"):
+        self.model_id = MODEL_ID
+        self.device = device
+        self.dtype_str = dtype_str
+        self._model = None
+        self._processor = None
+        self._loaded = False
+        self._load_time_ms: float = 0.0
+
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     def load(self) -> None:
@@ -69,122 +238,9 @@ class LocateAnythingEngine:
         """
         import torch
         from transformers import AutoProcessor, AutoModel
-        import transformers.modeling_utils
-        import inspect
 
-        if not getattr(transformers.modeling_utils.PreTrainedModel.__init__, "_is_patched", False):
-            original_init = transformers.modeling_utils.PreTrainedModel.__init__
-            def patched_init(self, *args, **kwargs):
-                original_method = getattr(self, "_check_and_adjust_attn_implementation", None)
-                if original_method is not None:
-                    def safe_check_and_adjust(*m_args, **m_kwargs):
-                        try:
-                            sig = inspect.signature(original_method)
-                            has_kwargs = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
-                            has_allow_all = "allow_all_kernels" in sig.parameters
-                            if not (has_kwargs or has_allow_all) and "allow_all_kernels" in m_kwargs:
-                                m_kwargs.pop("allow_all_kernels", None)
-                        except Exception:
-                            pass
-                        return original_method(*m_args, **m_kwargs)
-                    self._check_and_adjust_attn_implementation = safe_check_and_adjust
-                return original_init(self, *args, **kwargs)
-            patched_init._is_patched = True
-            transformers.modeling_utils.PreTrainedModel.__init__ = patched_init
-
-            # Patch get_expanded_tied_weights_keys to convert legacy list keys to dict keys
-            original_get_tied_keys = transformers.modeling_utils.PreTrainedModel.get_expanded_tied_weights_keys
-            def patched_get_tied_keys(self, *args, **kwargs):
-                if hasattr(self, "_tied_weights_keys"):
-                    val = self._tied_weights_keys
-                    if isinstance(val, list):
-                        tied_dict = {}
-                        # Dynamically find the input embedding parameter name
-                        embed_name = "model.embed_tokens.weight"
-                        try:
-                            for name, _ in self.named_parameters():
-                                if "embed_tokens.weight" in name or "wte.weight" in name:
-                                    embed_name = name
-                                    break
-                        except Exception:
-                            pass
-                        for k in val:
-                            if k == "lm_head.weight":
-                                tied_dict[k] = embed_name
-                            else:
-                                tied_dict[k] = k
-                        self.__dict__["_tied_weights_keys"] = tied_dict
-                return original_get_tied_keys(self, *args, **kwargs)
-            transformers.modeling_utils.PreTrainedModel.get_expanded_tied_weights_keys = patched_get_tied_keys
-
-            # Patch all_tied_weights_keys property on PreTrainedModel to dynamically resolve on demand
-            # if post_init is skipped or overridden by custom architectures.
-            def get_all_tied_keys(self):
-                if "all_tied_weights_keys" not in self.__dict__:
-                    try:
-                        self.__dict__["all_tied_weights_keys"] = self.get_expanded_tied_weights_keys(all_submodels=False)
-                    except Exception:
-                        self.__dict__["all_tied_weights_keys"] = []
-                return self.__dict__["all_tied_weights_keys"]
-
-            def set_all_tied_keys(self, val):
-                self.__dict__["all_tied_weights_keys"] = val
-
-            transformers.modeling_utils.PreTrainedModel.all_tied_weights_keys = property(
-                fget=get_all_tied_keys,
-                fset=set_all_tied_keys
-            )
-
-        # Patch Qwen2Config to support rope_theta property to prevent AttributeError
-        # when NVIDIA's custom model files read it from Qwen2Config.
-        try:
-            from transformers import Qwen2Config
-            # Use getattr/setattr wrapped in property to handle both reading and initialization writes
-            Qwen2Config.rope_theta = property(
-                fget=lambda self: getattr(self, "_rope_theta_val", 1000000.0),
-                fset=lambda self, val: setattr(self, "_rope_theta_val", val)
-            )
-        except Exception as e:
-            logger.warning(f"[LocateAnything] Failed to patch Qwen2Config: {e}")
-
-        # Patch DynamicCache to restore both to_legacy_cache and from_legacy_cache methods for backward compatibility
-        try:
-            import transformers.cache_utils
-            if not hasattr(transformers.cache_utils.DynamicCache, "to_legacy_cache"):
-                def to_legacy_cache(self):
-                    legacy_cache = ()
-                    if hasattr(self, "layers"):
-                        for layer in self.layers:
-                            legacy_cache += ((layer.keys, layer.values),)
-                    else:
-                        for layer_idx in range(len(getattr(self, "key_cache", []))):
-                            legacy_cache += ((self.key_cache[layer_idx], self.value_cache[layer_idx]),)
-                    return legacy_cache
-                transformers.cache_utils.DynamicCache.to_legacy_cache = to_legacy_cache
-
-            if not hasattr(transformers.cache_utils.DynamicCache, "from_legacy_cache"):
-                @classmethod
-                def from_legacy_cache(cls, past_key_values=None):
-                    cache = cls()
-                    if past_key_values is not None:
-                        if hasattr(cache, "layers"):
-                            from transformers.cache_utils import DynamicLayer
-                            cache.layers = []
-                            for layer_idx, (key, value) in enumerate(past_key_values):
-                                layer = DynamicLayer()
-                                layer.keys = key
-                                layer.values = value
-                                layer.is_initialized = True
-                                layer.dtype = key.dtype
-                                layer.device = key.device
-                                cache.layers.append(layer)
-                        else:
-                            cache.key_cache = [layer[0] for layer in past_key_values]
-                            cache.value_cache = [layer[1] for layer in past_key_values]
-                    return cache
-                transformers.cache_utils.DynamicCache.from_legacy_cache = from_legacy_cache
-        except Exception as e:
-            logger.warning(f"[LocateAnything] Failed to patch DynamicCache: {e}")
+        # Apply patches just to be safe
+        apply_patches()
 
         if self._loaded:
             logger.info("[LocateAnything] Already loaded, skipping.")
