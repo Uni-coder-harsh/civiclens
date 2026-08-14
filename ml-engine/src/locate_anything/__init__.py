@@ -153,8 +153,12 @@ class LocateAnythingEngine:
             if not hasattr(transformers.cache_utils.DynamicCache, "to_legacy_cache"):
                 def to_legacy_cache(self):
                     legacy_cache = ()
-                    for layer_idx in range(len(self.key_cache)):
-                        legacy_cache += ((self.key_cache[layer_idx], self.value_cache[layer_idx]),)
+                    if hasattr(self, "layers"):
+                        for layer in self.layers:
+                            legacy_cache += ((layer.keys, layer.values),)
+                    else:
+                        for layer_idx in range(len(getattr(self, "key_cache", []))):
+                            legacy_cache += ((self.key_cache[layer_idx], self.value_cache[layer_idx]),)
                     return legacy_cache
                 transformers.cache_utils.DynamicCache.to_legacy_cache = to_legacy_cache
         except Exception as e:
