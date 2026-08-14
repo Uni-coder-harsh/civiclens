@@ -68,7 +68,7 @@ class LocateAnythingEngine:
         Raises RuntimeError if CUDA is unavailable.
         """
         import torch
-        from transformers import AutoProcessor, AutoModelForCausalLM
+        from transformers import AutoProcessor, AutoModel
 
         if self._loaded:
             logger.info("[LocateAnything] Already loaded, skipping.")
@@ -88,10 +88,10 @@ class LocateAnythingEngine:
             self.model_id,
             trust_remote_code=True,
         )
-        self._model = AutoModelForCausalLM.from_pretrained(
+        self._model = AutoModel.from_pretrained(
             self.model_id,
             torch_dtype=dtype,
-            device_map=self.device,
+            device_map="auto" if self.device == "cuda" else self.device,
             trust_remote_code=True,
         )
         self._model.eval()
