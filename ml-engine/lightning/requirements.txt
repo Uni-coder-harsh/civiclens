@@ -11,6 +11,7 @@ sentencepiece
 opencv-python-headless
 decord
 lmdb
+numpy<2.0.0
 
 # Image processing
 Pillow>=10.0
