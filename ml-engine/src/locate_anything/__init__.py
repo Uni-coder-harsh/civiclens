@@ -117,6 +117,24 @@ class LocateAnythingEngine:
                 return original_get_tied_keys(self, *args, **kwargs)
             transformers.modeling_utils.PreTrainedModel.get_expanded_tied_weights_keys = patched_get_tied_keys
 
+            # Patch all_tied_weights_keys property on PreTrainedModel to dynamically resolve on demand
+            # if post_init is skipped or overridden by custom architectures.
+            def get_all_tied_keys(self):
+                if "all_tied_weights_keys" not in self.__dict__:
+                    try:
+                        self.__dict__["all_tied_weights_keys"] = self.get_expanded_tied_weights_keys(all_submodels=False)
+                    except Exception:
+                        self.__dict__["all_tied_weights_keys"] = []
+                return self.__dict__["all_tied_weights_keys"]
+
+            def set_all_tied_keys(self, val):
+                self.__dict__["all_tied_weights_keys"] = val
+
+            transformers.modeling_utils.PreTrainedModel.all_tied_weights_keys = property(
+                fget=get_all_tied_keys,
+                fset=set_all_tied_keys
+            )
+
         # Patch Qwen2Config to support rope_theta property to prevent AttributeError
         # when NVIDIA's custom model files read it from Qwen2Config.
         try:
