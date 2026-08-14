@@ -92,6 +92,18 @@ class LocateAnythingEngine:
             patched_init._is_patched = True
             transformers.modeling_utils.PreTrainedModel.__init__ = patched_init
 
+        # Patch Qwen2Config to support rope_theta property to prevent AttributeError
+        # when NVIDIA's custom model files read it from Qwen2Config.
+        try:
+            from transformers import Qwen2Config
+            # Use getattr/setattr wrapped in property to handle both reading and initialization writes
+            Qwen2Config.rope_theta = property(
+                fget=lambda self: getattr(self, "_rope_theta_val", 1000000.0),
+                fset=lambda self, val: setattr(self, "_rope_theta_val", val)
+            )
+        except Exception as e:
+            logger.warning(f"[LocateAnything] Failed to patch Qwen2Config: {e}")
+
         if self._loaded:
             logger.info("[LocateAnything] Already loaded, skipping.")
             return
