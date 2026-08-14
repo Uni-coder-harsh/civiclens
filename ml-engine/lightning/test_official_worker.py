@@ -13,7 +13,7 @@ from PIL import Image, ImageDraw
 repo_root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(repo_root / "ml-engine"))
 
-# Import src.locate_anything to apply the runtime patches!
+import torch
 import src.locate_anything
 from src.locate_anything.locateanything_worker import LocateAnythingWorker
 
@@ -27,7 +27,7 @@ def test_model(image_path: str, output_dir: Path):
     worker = LocateAnythingWorker(
         model_path="nvidia/LocateAnything-3B",
         device="cuda",
-        dtype=src.locate_anything.torch.bfloat16,
+        dtype=torch.bfloat16,
     )
     print("  ✅ LocateAnythingWorker initialized and model loaded.")
 
