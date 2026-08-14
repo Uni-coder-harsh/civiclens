@@ -252,6 +252,7 @@ class LocateAnythingEngine:
                 **inputs,
                 max_new_tokens=512,
                 do_sample=False,
+                use_cache=True,
             )
         t_infer = time.perf_counter()
 
