@@ -86,6 +86,7 @@ async def test_login_user_success():
     
     mock_session_repo = MagicMock()
     mock_session_repo.create = AsyncMock()
+    mock_session_repo.enforce_max_sessions = AsyncMock()
     
     service = AuthService(mock_db)
     service.user_repo = mock_user_repo

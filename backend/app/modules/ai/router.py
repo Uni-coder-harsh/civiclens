@@ -78,33 +78,27 @@ async def prediction_history(
     return await service.history(media_id)
 
 
-@router.post("/detect", response_model=DetectionResult, summary="ONNX Crack Detection")
+@router.post("/detect", response_model=DetectionResult, summary="ONNX/LocateAnything Crack Detection")
 async def detect_cracks(
     file: UploadFile = File(..., description="Road/infrastructure image (JPEG, PNG, WEBP, max 25 MB)"),
     media_id: uuid.UUID | None = Form(None, description="Optional: link this detection to an existing media record"),
     conf_threshold: float | None = Form(None, description="Override confidence threshold (0.0–1.0)"),
     iou_threshold: float | None = Form(None, description="Override IoU NMS threshold (0.0–1.0)"),
+    inspection_mode: str = Form("road", description="Inspection mode for LocateAnything (road | bridge | general_infrastructure)"),
     current_user: User = Depends(get_current_user),
     service: AIService = Depends(get_ai_service),
 ):
     """
-    **Primary ONNX crack detection endpoint.**
+    **Primary crack detection endpoint.**
 
-    Accepts an uploaded road or infrastructure image, runs YOLO11 ONNX inference,
+    Accepts an uploaded road or infrastructure image, runs inference (YOLO11 ONNX or LocateAnything-3B),
     and returns structured detection results including bounding boxes and class labels.
 
     - Authenticates the requesting user.
     - Validates image format, MIME type, and file size.
-    - Runs inference via the singleton `CrackONNXInferenceEngine`.
+    - Runs inference via the configured engine/provider.
     - Persists detection results to the database.
     - Returns a `DetectionResult` that Flutter can consume to render bounding boxes.
-
-    **Classes detected:**
-    - `D00_Longitudinal_Crack`
-    - `D10_Transverse_Crack`
-    - `D20_Alligator_Crack`
-    - `D30_Other_Corruption`
-    - `D40_Pothole`
     """
 
     # ── Validate content type ────────────────────────────────────────────────
@@ -141,7 +135,9 @@ async def detect_cracks(
         )
 
     # ── Get engine singleton ─────────────────────────────────────────────────
-    engine = get_inference_engine()
+    engine = None
+    if settings.AI_PROVIDER == "onnx":
+        engine = get_inference_engine()
 
     # ── Threshold validation ─────────────────────────────────────────────────
     if conf_threshold is not None and not (0.0 < conf_threshold < 1.0):
@@ -151,7 +147,7 @@ async def detect_cracks(
 
     logger.info(
         f"[detect] user={current_user.id} file={file.filename!r} "
-        f"size={len(image_bytes)//1024}KB media_id={media_id}"
+        f"size={len(image_bytes)//1024}KB media_id={media_id} mode={inspection_mode}"
     )
 
     # ── Run detection ────────────────────────────────────────────────────────
@@ -161,6 +157,7 @@ async def detect_cracks(
         media_id=media_id,
         conf_threshold=conf_threshold,
         iou_threshold=iou_threshold,
+        inspection_mode=inspection_mode,
     )
 
     if result.status == "failed":

@@ -13,17 +13,26 @@ env/
 
 # ML Outputs
 ai-engine/outputs/
+ml-engine/outputs/
 runs/
 wandb/
 logs/
 checkpoints/
 
-# Models
+# Models (never commit weights)
 *.pt
 *.pth
 *.onnx
 *.engine
 *.tflite
+*.safetensors
+*.bin
+
+# HuggingFace cache (model weights downloaded by Lightning)
+.cache/
+hf_cache/
+~/.cache/huggingface/
+ml-engine/lightning/outputs/
 
 # Dataset
 /data/

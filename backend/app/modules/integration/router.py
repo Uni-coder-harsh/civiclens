@@ -682,19 +682,23 @@ async def upload_infrastructure_report(request: Request, db: AsyncSession = Depe
 
 
 async def _run_report_ai_analysis(report, db: AsyncSession, *, trigger: str) -> dict:
-    """Download a report image, run ONNX inference, and persist the real result."""
+    """Download a report image, run inference (ONNX or LocateAnything), and persist the real result."""
     if not report.image_url or not report.image_url.startswith(("http://", "https://")):
         raise ValueError("Report has no public image URL to analyse.")
 
-    from app.modules.ai.dependencies import get_inference_engine
-    from app.modules.ai.severity import compute_severity, severity_to_readable
+    from app.modules.ai.dependencies import get_inference_engine, get_ai_service
+    from app.modules.ai.severity import severity_to_readable
+    from app.core.config import settings
     import httpx
 
     report_id = report.client_id or str(report.id)
-    logger.info(f"[AI Analysis] start report_id={report_id} trigger={trigger} image_url={report.image_url}")
-    engine = get_inference_engine()
-    if engine is None:
-        raise RuntimeError("ONNX inference engine is unavailable.")
+    logger.info(f"[AI Analysis] start report_id={report_id} trigger={trigger} image_url={report.image_url} provider={settings.AI_PROVIDER}")
+
+    engine = None
+    if settings.AI_PROVIDER == "onnx":
+        engine = get_inference_engine()
+        if engine is None:
+            raise RuntimeError("ONNX inference engine is unavailable.")
 
     async with httpx.AsyncClient(timeout=45.0, follow_redirects=True) as client:
         image_response = await client.get(report.image_url)
@@ -706,33 +710,45 @@ async def _run_report_ai_analysis(report, db: AsyncSession, *, trigger: str) -> 
     if len(image_bytes) > 25 * 1024 * 1024:
         raise ValueError("Stored image exceeds the 25 MB analysis limit.")
 
-    raw = engine.detect(image_bytes)
-    detections = raw.get("detections", [])
-    severity = compute_severity(
-        detections,
-        image_width=raw["image"]["width"],
-        image_height=raw["image"]["height"],
+    # Map category to proper inspection mode for LocateAnything
+    inspection_mode = "road"
+    if report.category and "bridge" in report.category.lower():
+        inspection_mode = "bridge"
+
+    ai_service = get_ai_service(db)
+    result = await ai_service.run_detection(
+        engine=engine,
+        image_data=image_bytes,
+        media_id=report.id,
+        inspection_mode=inspection_mode,
     )
-    analysis = {
-        "status": raw["status"],
-        "model": raw["model"],
-        "image": raw["image"],
-        "detections": detections,
-        "detection_count": raw["detection_count"],
-        "timing_ms": raw["timing_ms"],
-        "severity": severity,
-    }
+
+    if result.status == "failed":
+        raise ValueError(result.error_message or "AI Inference failed.")
+
+    # Convert the Pydantic response schema to dict for JSONB database storage
+    analysis = result.model_dump()
+    # Serialize UUID fields to strings for JSON compliance
+    if analysis.get("inference_log_id"):
+        analysis["inference_log_id"] = str(analysis["inference_log_id"])
+
     report.ai_detections = analysis
-    report.ai_confidence = severity["primary_confidence"]
-    report.ai_label = severity_to_readable(
-        severity["primary_class"], severity["primary_confidence"]
-    )
-    report.ai_severity = severity["severity_label"]
+    if result.severity:
+        report.ai_confidence = float(result.severity.primary_confidence) if result.severity.primary_confidence is not None else 0.0
+        report.ai_label = severity_to_readable(
+            result.severity.primary_class, result.severity.primary_confidence
+        )
+        report.ai_severity = result.severity.severity_label
+    else:
+        report.ai_confidence = 0.0
+        report.ai_label = "No defect detected"
+        report.ai_severity = "low"
+
     await db.flush()
     logger.info(
         f"[AI Analysis] completed report_id={report_id} trigger={trigger} "
-        f"detections={analysis['detection_count']} severity={report.ai_severity} "
-        f"confidence={report.ai_confidence} total_ms={raw['timing_ms']['total']}"
+        f"detections={result.detection_count} severity={report.ai_severity} "
+        f"confidence={report.ai_confidence} total_ms={result.timing_ms.total}"
     )
     return analysis
 

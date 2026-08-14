@@ -59,6 +59,15 @@ class Settings(BaseSettings):
     # Override with MODEL_DOWNLOAD_URL env var if needed
     MODEL_DOWNLOAD_URL: str | None = "https://huggingface.co/Uni-coder-harsh45/civiclens-crack-detector/resolve/main/best.onnx"
 
+    # LocateAnything-3B Remote Inference Service (Lightning AI GPU)
+    # AI_PROVIDER controls which engine the backend uses:
+    #   "onnx"           — existing local ONNX model (default, no GPU needed)
+    #   "locateanything" — remote Lightning GPU inference service
+    AI_PROVIDER: str = "onnx"
+    LA_INFERENCE_URL: str | None = None   # e.g. https://xxxx.lightning.ai:8000
+    LA_SERVICE_SECRET: str | None = None  # Bearer token — must match Lightning env var
+    LA_TIMEOUT_SECONDS: int = 60          # Max seconds to wait for GPU inference
+
     # Rate Limiter
     RATE_LIMIT_ENABLED: bool = True
 

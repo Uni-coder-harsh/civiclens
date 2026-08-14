@@ -1,5 +1,8 @@
 """
 CivicLens AI Service — Orchestrates ONNX inference + DB persistence.
+Supports multiple AI providers via AI_PROVIDER config:
+  - "onnx"           → existing local CrackONNXInferenceEngine (default)
+  - "locateanything" → remote Lightning GPU LocateAnything-3B service
 """
 
 import uuid
@@ -11,12 +14,14 @@ from typing import Optional, Any
 
 from PIL import Image
 
+from app.core.config import settings
 from app.modules.ai.model import AIInferenceLog, AIModel, AIPrediction
 from app.modules.ai.repository import AIInferenceRepository, AIModelRepository, AIPredictionRepository
 from app.modules.ai.schema import AIModelCreate, AnalysisSubmit, DetectionResult
 from app.modules.ai.severity import compute_severity
 
 logger = logging.getLogger("civiclens.ai.service")
+
 
 # Sentinel value used for inferring without a linked media_id
 _NULL_UUID = uuid.UUID("00000000-0000-0000-0000-000000000000")
@@ -73,6 +78,91 @@ class AIService:
         media_id: Optional[uuid.UUID] = None,
         conf_threshold: Optional[float] = None,
         iou_threshold: Optional[float] = None,
+        inspection_mode: str = "road",
+    ) -> DetectionResult:
+        """
+        Orchestrates AI inference. Routes to the configured AI_PROVIDER:
+          - "onnx"           → CrackONNXInferenceEngine (local ONNX, default)
+          - "locateanything" → LocateAnythingClient → Lightning GPU
+
+        In both cases:
+          1. Runs inference
+          2. Persists AIInferenceLog + AIPrediction records to DB
+          3. Returns a DetectionResult schema
+        """
+        # ── Provider routing ──────────────────────────────────────────────────
+        if settings.AI_PROVIDER == "locateanything" and settings.LA_INFERENCE_URL:
+            return await self._run_locateanything(image_data, media_id, inspection_mode)
+
+        # Default: ONNX engine
+        return await self._run_onnx(engine, image_data, media_id, conf_threshold, iou_threshold)
+
+    async def _run_locateanything(
+        self,
+        image_data: bytes,
+        media_id: Optional[uuid.UUID],
+        inspection_mode: str = "road",
+    ) -> DetectionResult:
+        """Call the remote LocateAnything-3B Lightning service."""
+        from app.modules.ai.locate_anything_client import LocateAnythingClient
+        try:
+            client = LocateAnythingClient()
+            result = await client.detect_and_normalize(
+                image_bytes=image_data,
+                inspection_mode=inspection_mode,
+            )
+        except Exception as e:
+            logger.error(f"[AIService] LocateAnything call failed: {e}")
+            return DetectionResult(
+                status="failed",
+                model={"name": "LocateAnything-3B", "version": "nvidia/LocateAnything-3B", "runtime": "transformers", "provider": "lightning_gpu"},
+                image={"width": 0, "height": 0},
+                detections=[],
+                detection_count=0,
+                timing_ms={"preprocess": 0, "inference": 0, "postprocess": 0, "total": 0},
+                error_message=f"LocateAnything inference failed: {e}",
+            )
+
+        # Persist to DB (best-effort)
+        try:
+            await self._persist_detections(
+                model_name="LocateAnything-3B",
+                model_version="nvidia/LocateAnything-3B",
+                media_id=media_id,
+                duration_ms=int(result.timing_ms.total if hasattr(result.timing_ms, "total") else result.timing_ms.get("total", 0)),
+                detections=[d.model_dump() if hasattr(d, "model_dump") else d for d in result.detections],
+                orig_w=result.image.width if hasattr(result.image, "width") else result.image.get("width", 0),
+                orig_h=result.image.height if hasattr(result.image, "height") else result.image.get("height", 0),
+            )
+        except Exception as db_err:
+            logger.warning(f"[AIService] DB persistence failed for LA result: {db_err}")
+
+        severity = compute_severity(
+            [d.model_dump() if hasattr(d, "model_dump") else d for d in result.detections],
+            result.image.width if hasattr(result.image, "width") else result.image.get("width", 0),
+            result.image.height if hasattr(result.image, "height") else result.image.get("height", 0),
+        )
+
+        return DetectionResult(
+            status=result.status,
+            model=result.model,
+            image=result.image,
+            detections=result.detections,
+            detection_count=result.detection_count,
+            timing_ms=result.timing_ms,
+            severity=severity,
+            inference_log_id=result.inference_log_id,
+            annotated_image_url=result.annotated_image_url,
+            error_message=result.error_message,
+        )
+
+    async def _run_onnx(
+        self,
+        engine: Any,
+        image_data: bytes,
+        media_id: Optional[uuid.UUID],
+        conf_threshold: Optional[float],
+        iou_threshold: Optional[float],
     ) -> DetectionResult:
         """
         Orchestrates:
@@ -182,3 +272,48 @@ class AIService:
             inference_log_id=log_id,
             severity=severity,
         )
+
+    async def _persist_detections(
+        self,
+        model_name: str,
+        model_version: str,
+        media_id: Optional[uuid.UUID],
+        duration_ms: int,
+        detections: list[dict],
+        orig_w: int,
+        orig_h: int,
+    ) -> None:
+        """Shared DB persistence helper for both ONNX and LocateAnything results."""
+        models = await self.model_repo.list()
+        model_record = next((m for m in models if m.version == model_version), None)
+        if model_record is None:
+            model_record = await self.model_repo.create(
+                AIModel(name=model_name, version=model_version, file_path="remote", is_active=True)
+            )
+
+        _media_id = media_id if media_id else _NULL_UUID
+        log = AIInferenceLog(
+            model_id=model_record.id,
+            media_id=_media_id,
+            inference_duration_ms=duration_ms,
+            status="SUCCESS",
+        )
+        await self.inference_repo.create(log)
+
+        for det in detections:
+            bb = det.get("bounding_box", {})
+            x_center_n = ((bb.get("x1", 0) + bb.get("x2", 0)) / 2.0) / orig_w if orig_w > 0 else 0.0
+            y_center_n = ((bb.get("y1", 0) + bb.get("y2", 0)) / 2.0) / orig_h if orig_h > 0 else 0.0
+            width_n = bb.get("width", 0) / orig_w if orig_w > 0 else 0.0
+            height_n = bb.get("height", 0) / orig_h if orig_h > 0 else 0.0
+
+            pred = AIPrediction(
+                inference_log_id=log.id,
+                class_name=det.get("class_name") or det.get("label", "damage"),
+                confidence=Decimal(str(round(float(det.get("confidence") or det.get("grounding_score") or 0.0), 4))),
+                bbox_x_center=Decimal(str(round(x_center_n, 5))),
+                bbox_y_center=Decimal(str(round(y_center_n, 5))),
+                bbox_width=Decimal(str(round(width_n, 5))),
+                bbox_height=Decimal(str(round(height_n, 5))),
+            )
+            await self.prediction_repo.create(pred)

@@ -65,7 +65,7 @@ class InferenceResponse(BaseResponseSchema):
 
 # ── Detection-specific response schemas (ONNX pipeline) ──────────────────────
 
-class DetectionBoundingBox(BaseResponseSchema):
+class DetectionBoundingBox(BaseRequestSchema):
     x1: int
     y1: int
     x2: int
@@ -74,33 +74,33 @@ class DetectionBoundingBox(BaseResponseSchema):
     height: int
 
 
-class DetectionItem(BaseResponseSchema):
+class DetectionItem(BaseRequestSchema):
     class_id: int
     class_name: str
     confidence: float
     bounding_box: DetectionBoundingBox
 
 
-class DetectionModelInfo(BaseResponseSchema):
+class DetectionModelInfo(BaseRequestSchema):
     name: str
     version: str
     runtime: str
     provider: str
 
 
-class DetectionImageInfo(BaseResponseSchema):
+class DetectionImageInfo(BaseRequestSchema):
     width: int
     height: int
 
 
-class DetectionTimingMs(BaseResponseSchema):
+class DetectionTimingMs(BaseRequestSchema):
     preprocess: float
     inference: float
     postprocess: float
     total: float
 
 
-class DetectionSeverity(BaseResponseSchema):
+class DetectionSeverity(BaseRequestSchema):
     severity_label: str
     severity_score: float
     primary_class: str | None = None
@@ -109,9 +109,9 @@ class DetectionSeverity(BaseResponseSchema):
     detection_count: int
 
 
-class DetectionResult(BaseResponseSchema):
+class DetectionResult(BaseRequestSchema):
     """
-    Full ONNX crack-detection result returned to Flutter and stored in DB.
+    Full ONNX/LocateAnything crack-detection result returned to Flutter and stored in DB.
     Conforms to the CivicLens detection API contract.
     """
     status: str                                   # "completed" | "failed"
@@ -126,7 +126,7 @@ class DetectionResult(BaseResponseSchema):
     error_message: str | None = None
 
 
-class EngineDebugResponse(BaseResponseSchema):
+class EngineDebugResponse(BaseRequestSchema):
     """Diagnostic info about the loaded ONNX model (dev/staging only)."""
     model_path: str
     model_version: str

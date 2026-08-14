@@ -1,0 +1,22 @@
+# CivicLens LocateAnything-3B Inference Service — Lightning AI Requirements
+# Install with: pip install -r ml-engine/lightning/requirements.txt
+
+# Core ML
+torch>=2.3.0
+torchvision
+transformers>=4.46.0
+accelerate>=0.34.0
+einops
+sentencepiece
+
+# Image processing
+Pillow>=10.0
+
+# Inference service
+fastapi>=0.111.0
+uvicorn[standard]>=0.30.0
+python-multipart
+httpx>=0.27.0
+
+# Note: flash-attn is optional. Install separately if available:
+#   pip install flash-attn --no-build-isolation
