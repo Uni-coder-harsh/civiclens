@@ -4,7 +4,7 @@
 # Core ML
 torch>=2.3.0
 torchvision
-transformers==4.46.3
+transformers>=4.48.0
 accelerate>=0.34.0
 einops
 sentencepiece

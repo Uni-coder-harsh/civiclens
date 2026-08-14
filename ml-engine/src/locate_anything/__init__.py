@@ -69,6 +69,28 @@ class LocateAnythingEngine:
         """
         import torch
         from transformers import AutoProcessor, AutoModel
+        import transformers.modeling_utils
+        import inspect
+
+        if not getattr(transformers.modeling_utils.PreTrainedModel.__init__, "_is_patched", False):
+            original_init = transformers.modeling_utils.PreTrainedModel.__init__
+            def patched_init(self, *args, **kwargs):
+                original_method = getattr(self, "_check_and_adjust_attn_implementation", None)
+                if original_method is not None:
+                    def safe_check_and_adjust(*m_args, **m_kwargs):
+                        try:
+                            sig = inspect.signature(original_method)
+                            has_kwargs = any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
+                            has_allow_all = "allow_all_kernels" in sig.parameters
+                            if not (has_kwargs or has_allow_all) and "allow_all_kernels" in m_kwargs:
+                                m_kwargs.pop("allow_all_kernels", None)
+                        except Exception:
+                            pass
+                        return original_method(*m_args, **m_kwargs)
+                    self._check_and_adjust_attn_implementation = safe_check_and_adjust
+                return original_init(self, *args, **kwargs)
+            patched_init._is_patched = True
+            transformers.modeling_utils.PreTrainedModel.__init__ = patched_init
 
         if self._loaded:
             logger.info("[LocateAnything] Already loaded, skipping.")
