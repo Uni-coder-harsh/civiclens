@@ -92,6 +92,31 @@ class LocateAnythingEngine:
             patched_init._is_patched = True
             transformers.modeling_utils.PreTrainedModel.__init__ = patched_init
 
+            # Patch get_expanded_tied_weights_keys to convert legacy list keys to dict keys
+            original_get_tied_keys = transformers.modeling_utils.PreTrainedModel.get_expanded_tied_weights_keys
+            def patched_get_tied_keys(self, *args, **kwargs):
+                if hasattr(self, "_tied_weights_keys"):
+                    val = self._tied_weights_keys
+                    if isinstance(val, list):
+                        tied_dict = {}
+                        # Dynamically find the input embedding parameter name
+                        embed_name = "model.embed_tokens.weight"
+                        try:
+                            for name, _ in self.named_parameters():
+                                if "embed_tokens.weight" in name or "wte.weight" in name:
+                                    embed_name = name
+                                    break
+                        except Exception:
+                            pass
+                        for k in val:
+                            if k == "lm_head.weight":
+                                tied_dict[k] = embed_name
+                            else:
+                                tied_dict[k] = k
+                        self.__dict__["_tied_weights_keys"] = tied_dict
+                return original_get_tied_keys(self, *args, **kwargs)
+            transformers.modeling_utils.PreTrainedModel.get_expanded_tied_weights_keys = patched_get_tied_keys
+
         # Patch Qwen2Config to support rope_theta property to prevent AttributeError
         # when NVIDIA's custom model files read it from Qwen2Config.
         try:
