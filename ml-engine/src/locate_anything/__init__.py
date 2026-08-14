@@ -224,8 +224,23 @@ class LocateAnythingEngine:
         t_start = time.perf_counter()
 
         # ── Preprocess ────────────────────────────────────────────────────────
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": active_prompt}
+                ]
+            }
+        ]
+        text_prompt = self._processor.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+
         inputs = self._processor(
-            text=active_prompt,
+            text=text_prompt,
             images=[pil_img],
             return_tensors="pt",
         ).to(self.device)
