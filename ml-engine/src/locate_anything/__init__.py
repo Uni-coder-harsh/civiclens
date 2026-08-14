@@ -255,6 +255,7 @@ class LocateAnythingEngine:
                 max_new_tokens=512,
                 do_sample=False,
                 use_cache=True,
+                tokenizer=self._processor.tokenizer,
             )
         t_infer = time.perf_counter()
 
