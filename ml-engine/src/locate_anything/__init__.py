@@ -171,6 +171,8 @@ class LocateAnythingEngine:
             device_map="auto" if self.device == "cuda" else self.device,
             trust_remote_code=True,
         )
+        if hasattr(self._processor, "tokenizer"):
+            self._model.tokenizer = self._processor.tokenizer
         self._model.eval()
         self._load_time_ms = (time.perf_counter() - t0) * 1000
         self._loaded = True
