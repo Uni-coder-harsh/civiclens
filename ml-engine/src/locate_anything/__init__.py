@@ -226,7 +226,7 @@ class LocateAnythingEngine:
         # ── Preprocess ────────────────────────────────────────────────────────
         inputs = self._processor(
             text=active_prompt,
-            images=pil_img,
+            images=[pil_img],
             return_tensors="pt",
         ).to(self.device)
         t_prep = time.perf_counter()
