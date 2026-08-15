@@ -415,6 +415,26 @@ async def upload_infrastructure_report(request: Request, db: AsyncSession = Depe
         logger.error(f"[REPORT UPLOAD] Global parsing exception: {parse_err}")
         raise HTTPException(status_code=400, detail=f"Failed to parse request: {str(parse_err)}")
 
+    # ── Reverse Geocode address ───────────────────────────────────────────────
+    address_str = "Pune, India"
+    try:
+        from app.modules.infrastructure_identity.providers import ProviderRegistry
+        registry = ProviderRegistry()
+        geo_res = await registry.reverse_geocode(payload.capture.latitude, payload.capture.longitude)
+        if geo_res and geo_res.get("address"):
+            addr = geo_res["address"]
+            parts = []
+            if "road" in addr: parts.append(addr["road"])
+            elif "pedestrian" in addr: parts.append(addr["pedestrian"])
+            elif "suburb" in addr: parts.append(addr["suburb"])
+            if "city" in addr: parts.append(addr["city"])
+            elif "town" in addr: parts.append(addr["town"])
+            if "state" in addr: parts.append(addr["state"])
+            if parts:
+                address_str = ", ".join(parts)
+    except Exception as ge_err:
+        logger.warning(f"[Upload] Reverse geocoding note: {ge_err}")
+
     # Save to Neon PostgreSQL database with geospatial point geometry
     try:
         # 1. Fetch default organization
@@ -445,7 +465,7 @@ async def upload_infrastructure_report(request: Request, db: AsyncSession = Depe
             geometry=geom_point,
             classification="MUNICIPAL",
             status=asset_status,
-            address="Pune, India"
+            address=address_str
         )
         db.add(asset)
         await db.flush()
@@ -633,7 +653,8 @@ async def upload_infrastructure_report(request: Request, db: AsyncSession = Depe
         "longitude": payload.capture.longitude,
         "contractor_id": payload.contractor_id,
         "thumbnail_url": image_url,
-        "watermark_verified": True
+        "watermark_verified": True,
+        "address": address_str
     }
 
     store.tickets[payload.id] = {
@@ -1309,6 +1330,9 @@ async def fetch_nearby_defects(lat: float, lng: float, radius_m: float, status: 
             continue
         dist = haversine_distance(lat, lng, d["latitude"], d["longitude"])
         if dist <= radius_m:
+            # Fallback for address in nearby defects
+            if not d.get("address"):
+                d["address"] = d.get("zone") or "Pune, India"
             results.append(d)
     return results
 

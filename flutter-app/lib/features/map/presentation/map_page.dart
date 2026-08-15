@@ -22,6 +22,7 @@ class _MapViewState {
   final bool showCoverage;
   final NearbyDefect? selectedDefect;
   final LatLng? userLocation;
+  final bool showSatellite;
 
   const _MapViewState({
     this.defects = const [],
@@ -29,6 +30,7 @@ class _MapViewState {
     this.showCoverage = false,
     this.selectedDefect,
     this.userLocation,
+    this.showSatellite = false,
   });
 
   _MapViewState copyWith({
@@ -38,6 +40,7 @@ class _MapViewState {
     NearbyDefect? selectedDefect,
     LatLng? userLocation,
     bool clearSelected = false,
+    bool? showSatellite,
   }) =>
       _MapViewState(
         defects: defects ?? this.defects,
@@ -46,6 +49,7 @@ class _MapViewState {
         selectedDefect:
             clearSelected ? null : (selectedDefect ?? this.selectedDefect),
         userLocation: userLocation ?? this.userLocation,
+        showSatellite: showSatellite ?? this.showSatellite,
       );
 }
 
@@ -55,6 +59,10 @@ class _MapNotifier extends Notifier<_MapViewState> {
 
   @override
   _MapViewState build() => const _MapViewState();
+
+  void toggleMapStyle() {
+    state = state.copyWith(showSatellite: !state.showSatellite);
+  }
 
   void onPositionChanged(LatLng center) {
     _lastCenter = center;
@@ -138,17 +146,95 @@ class MapPage extends ConsumerStatefulWidget {
 
 class _MapPageState extends ConsumerState<MapPage> {
   final MapController _mapController = MapController();
+  StreamSubscription<Position>? _positionStreamSub;
+  NearbyDefect? _activeWarningDefect;
+  double _activeWarningDistance = 0.0;
+  bool _isCriticalWarning = false;
+  final Set<String> _dismissedWarnings = {};
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(_mapNotifierProvider.notifier).refresh(_mapController);
+      _startPositionStreaming();
+    });
+  }
+
+  void _startPositionStreaming() {
+    _positionStreamSub?.cancel();
+    const locationSettings = LocationSettings(
+      accuracy: LocationAccuracy.bestForNavigation,
+      distanceFilter: 2, // Check every 2 meters
+    );
+
+    _positionStreamSub = Geolocator.getPositionStream(
+      locationSettings: locationSettings,
+    ).listen((position) {
+      final mapState = ref.read(_mapNotifierProvider);
+      if (mapState.defects.isEmpty) return;
+
+      NearbyDefect? closestWarningDefect;
+      double closestDistance = double.infinity;
+      bool isCritical = false;
+
+      for (final defect in mapState.defects) {
+        if (_dismissedWarnings.contains(defect.reportId)) continue;
+
+        final double distance = Geolocator.distanceBetween(
+          position.latitude,
+          position.longitude,
+          defect.latitude,
+          defect.longitude,
+        );
+
+        // Notify if within 200m
+        if (distance > 200) continue;
+
+        // Check if heading towards defect
+        bool isHeadingTowards = true;
+        if (position.speed > 1.0 && position.heading != 0) {
+          final double bearing = Geolocator.bearingBetween(
+            position.latitude,
+            position.longitude,
+            defect.latitude,
+            defect.longitude,
+          );
+          final double headingDiff = (bearing - position.heading).abs() % 360;
+          final double angle = headingDiff > 180 ? 360 - headingDiff : headingDiff;
+          isHeadingTowards = angle <= 45; // heading within a 45-degree cone
+        }
+
+        if (isHeadingTowards) {
+          if (distance < closestDistance) {
+            closestDistance = distance;
+            closestWarningDefect = defect;
+            isCritical = distance <= 50;
+          }
+        }
+      }
+
+      if (closestWarningDefect != null) {
+        if (mounted) {
+          setState(() {
+            _activeWarningDefect = closestWarningDefect;
+            _activeWarningDistance = closestDistance;
+            _isCriticalWarning = isCritical;
+          });
+        }
+      } else {
+        if (_activeWarningDefect != null && mounted) {
+          setState(() {
+            _activeWarningDefect = null;
+          });
+        }
+      }
     });
   }
 
   @override
   void dispose() {
+    _positionStreamSub?.cancel();
     _mapController.dispose();
     super.dispose();
   }
@@ -175,7 +261,9 @@ class _MapPageState extends ConsumerState<MapPage> {
             ),
             children: [
               TileLayer(
-                urlTemplate: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                urlTemplate: mapState.showSatellite
+                    ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+                    : 'https://tile.openstreetmap.org/{z}/{y}/{x}.png',
                 userAgentPackageName: 'com.civiclens.app',
                 retinaMode: RetinaMode.isHighDensity(context),
               ),
@@ -184,6 +272,25 @@ class _MapPageState extends ConsumerState<MapPage> {
               ),
             ],
           ),
+
+          // Top Hazard warning overlay banner
+          if (_activeWarningDefect != null)
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 68,
+              left: 16,
+              right: 16,
+              child: _HazardAlertBanner(
+                defect: _activeWarningDefect!,
+                distance: _activeWarningDistance,
+                isCritical: _isCriticalWarning,
+                onDismiss: () {
+                  setState(() {
+                    _dismissedWarnings.add(_activeWarningDefect!.reportId);
+                    _activeWarningDefect = null;
+                  });
+                },
+              ),
+            ),
 
           // Top overlay: Status pill + Role Action Pill + Coverage toggle
           Positioned(
@@ -353,6 +460,20 @@ class _MapPageState extends ConsumerState<MapPage> {
             bottom: 90,
             left: 16,
             child: _PinLegend(),
+          ),
+
+          // Map style toggle button
+          Positioned(
+            bottom: 144,
+            right: 16,
+            child: _MapControlButton(
+              icon: mapState.showSatellite
+                  ? Icons.map_rounded
+                  : Icons.satellite_alt_rounded,
+              onTap: () {
+                ref.read(_mapNotifierProvider.notifier).toggleMapStyle();
+              },
+            ),
           ),
 
           // My location button
@@ -714,12 +835,26 @@ class _DefectBottomSheet extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 4),
+                      if (defect.address != null && defect.address!.isNotEmpty) ...[
+                        Text(
+                          defect.address!,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onSurface.withOpacity(0.8),
+                            fontFamily: 'Inter',
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                      ],
                       Text(
                         '${defect.latitude.toStringAsFixed(4)}°, ${defect.longitude.toStringAsFixed(4)}°',
                         style: const TextStyle(
                           color: Color(0xFF64748B),
                           fontFamily: 'Inter',
-                          fontSize: 12,
+                          fontSize: 10,
                         ),
                       ),
                     ],
@@ -1276,6 +1411,175 @@ class _FieldModeCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _HazardAlertBanner extends StatefulWidget {
+  final NearbyDefect defect;
+  final double distance;
+  final bool isCritical;
+  final VoidCallback onDismiss;
+
+  const _HazardAlertBanner({
+    required this.defect,
+    required this.distance,
+    required this.isCritical,
+    required this.onDismiss,
+  });
+
+  @override
+  State<_HazardAlertBanner> createState() => _HazardAlertBannerState();
+}
+
+class _HazardAlertBannerState extends State<_HazardAlertBanner> with SingleTickerProviderStateMixin {
+  late AnimationController _pulseController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bool isCritical = widget.isCritical;
+    final Color bgColor = isCritical ? const Color(0xFF990000) : const Color(0xFFD97706);
+    final Color textColor = Colors.white;
+
+    String warningTitle = isCritical ? 'CRITICAL HAZARD AHEAD' : 'HAZARD AHEAD';
+    String warningDesc = isCritical
+        ? 'Go slow! Critical ${_defectLabel(widget.defect.category)} detected.'
+        : 'Drive carefully. ${_defectLabel(widget.defect.category)} nearby.';
+
+    return AnimatedBuilder(
+      animation: _pulseController,
+      builder: (context, child) {
+        return Container(
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isCritical
+                  ? const Color(0xFFEF4444).withValues(alpha: _pulseController.value * 0.8)
+                  : const Color(0xFFF59E0B).withValues(alpha: 0.5),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: bgColor.withValues(alpha: isCritical ? _pulseController.value * 0.4 + 0.1 : 0.2),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              // Icon container with pulse
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isCritical ? Icons.report_problem_rounded : Icons.warning_amber_rounded,
+                  color: textColor,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Message
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      warningTitle,
+                      style: TextStyle(
+                        color: textColor,
+                        fontFamily: 'Inter',
+                        fontWeight: FontWeight.w900,
+                        fontSize: 12,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      warningDesc,
+                      style: TextStyle(
+                        color: textColor.withValues(alpha: 0.9),
+                        fontFamily: 'Inter',
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Distance: ${widget.distance.toStringAsFixed(0)}m',
+                      style: TextStyle(
+                        color: textColor.withValues(alpha: 0.7),
+                        fontFamily: 'Inter',
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Dismiss
+              GestureDetector(
+                onTap: widget.onDismiss,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.close_rounded,
+                    color: textColor.withValues(alpha: 0.8),
+                    size: 16,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  String _defectLabel(ReportCategory cat) {
+    switch (cat) {
+      case ReportCategory.pothole:
+        return 'pothole';
+      case ReportCategory.roadCrack:
+        return 'road crack';
+      case ReportCategory.bridgeDeck:
+        return 'bridge deck defect';
+      case ReportCategory.bridgePier:
+        return 'bridge pier defect';
+      case ReportCategory.bridgeCrack:
+        return 'bridge crack';
+      case ReportCategory.guardrail:
+        return 'damaged guardrail';
+      case ReportCategory.manhole:
+        return 'damaged manhole';
+      case ReportCategory.other:
+        return 'defect';
+    }
   }
 }
 
