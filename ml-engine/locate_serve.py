@@ -1,16 +1,16 @@
 """
-CivicLens — LocateAnything-3B Inference Service
+CivicLens — ONNX YOLO Crack Detection Inference Service
 ml-engine/locate_serve.py
 
-FastAPI service that loads LocateAnything-3B ONCE at startup and exposes
+FastAPI service that loads the ONNX YOLO11 model ONCE at startup and exposes
 a /detect endpoint for the CivicLens backend to call.
 
 Architecture:
     CivicLens FastAPI Backend (Railway)
         ↓  HTTP POST /detect
-    This service (Lightning AI GPU)
+    This service (Railway / any server with CPU)
         ↓
-    LocateAnything-3B
+    ONNX YOLO11 Crack Detector (640x640 input)
         ↓
     Normalized JSON → Backend → Flutter
 
@@ -20,17 +20,15 @@ Security:
     - MIME type validated
     - Image dimensions validated
 
-Usage (Lightning Studio):
-    export LA_SERVICE_SECRET=your-secret-here
+Usage:
     python ml-engine/locate_serve.py
 
     # Or with uvicorn directly:
-    uvicorn ml-engine.locate_serve:app --host 0.0.0.0 --port 8000
+    uvicorn locate_serve:app --host 0.0.0.0 --port 8000
 
 Environment variables:
     LA_SERVICE_SECRET   — Bearer token for authenticating backend requests
-    LA_DEVICE           — "cuda" (default) or "cpu"
-    LA_DTYPE            — "bfloat16" (default) or "float16"
+    MODEL_PATH          — Path to best.onnx (default: ml-engine/best.onnx)
     LA_MAX_IMAGE_MB     — Max upload size in MB (default: 20)
     PORT                — HTTP port (default: 8000)
 """
@@ -58,8 +56,7 @@ logger = logging.getLogger("locate_serve")
 
 # ── Configuration (from environment) ─────────────────────────────────────────
 LA_SERVICE_SECRET: str | None = os.getenv("LA_SERVICE_SECRET")
-LA_DEVICE: str = os.getenv("LA_DEVICE", "cuda")
-LA_DTYPE: str = os.getenv("LA_DTYPE", "bfloat16")
+MODEL_PATH: str = os.getenv("MODEL_PATH", "ml-engine/best.onnx")
 LA_MAX_IMAGE_MB: int = int(os.getenv("LA_MAX_IMAGE_MB", "20"))
 PORT: int = int(os.getenv("PORT", "8000"))
 MAX_IMAGE_BYTES = LA_MAX_IMAGE_MB * 1024 * 1024
@@ -67,12 +64,12 @@ MAX_IMAGE_BYTES = LA_MAX_IMAGE_MB * 1024 * 1024
 ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/webp", "image/heic"}
 
 # ── Global engine singleton ───────────────────────────────────────────────────
-_engine: "LocateAnythingEngine | None" = None
+_engine = None
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load LocateAnything-3B ONCE at startup. Keep in VRAM for all requests."""
+    """Load ONNX YOLO model ONCE at startup. Keep in memory for all requests."""
     global _engine
     import sys
     from pathlib import Path
@@ -81,24 +78,38 @@ async def lifespan(app: FastAPI):
         if p not in sys.path:
             sys.path.insert(0, p)
 
-    from src.locate_anything import LocateAnythingEngine
-    logger.info(f"[Startup] Loading LocateAnything-3B on {LA_DEVICE} ({LA_DTYPE})...")
-    _engine = LocateAnythingEngine(device=LA_DEVICE, dtype_str=LA_DTYPE)
+    from src.inference.engine import CrackONNXInferenceEngine
+
+    model_path = MODEL_PATH
+    if not os.path.isabs(model_path):
+        model_path = str(Path(__file__).parent / model_path.lstrip("ml-engine/"))
+        if not os.path.exists(model_path):
+            model_path = MODEL_PATH  # fallback to original
+
+    logger.info(f"[Startup] Loading ONNX model from {model_path}...")
+    t0 = time.perf_counter()
     try:
-        _engine.load()
-        logger.info(f"[Startup] Model ready. Load time: {_engine._load_time_ms:.0f}ms")
+        _engine = CrackONNXInferenceEngine(
+            model_path=model_path,
+            provider="CPUExecutionProvider",
+            conf_threshold=0.25,
+            iou_threshold=0.45,
+            input_size=640,
+            version="crack-detector-v1",
+        )
+        load_ms = (time.perf_counter() - t0) * 1000
+        logger.info(f"[Startup] Model ready. Load time: {load_ms:.0f}ms")
     except Exception as e:
         logger.error(f"[Startup] FAILED to load model: {e}")
-        # Don't crash the service — return 503 on requests if model not loaded
         _engine = None
     yield
-    logger.info("[Shutdown] LocateAnything service stopping.")
+    logger.info("[Shutdown] ONNX inference service stopping.")
 
 
 # ── FastAPI app ───────────────────────────────────────────────────────────────
 app = FastAPI(
-    title="CivicLens LocateAnything-3B Inference Service",
-    description="GPU inference endpoint for crack/damage localization. Called by CivicLens backend.",
+    title="CivicLens ONNX Crack Detection Service",
+    description="CPU inference endpoint for road crack/damage detection. Called by CivicLens backend.",
     version="1.0.0",
     lifespan=lifespan,
     docs_url="/docs",
@@ -131,10 +142,10 @@ def verify_auth(credentials: Optional[HTTPAuthorizationCredentials] = Depends(be
 @app.get("/health")
 async def health():
     """Health probe — returns model status without auth."""
-    engine_ok = _engine is not None and _engine.is_loaded()
+    engine_ok = _engine is not None
     return {
         "status": "ok" if engine_ok else "degraded",
-        "model": "nvidia/LocateAnything-3B",
+        "model": "civiclens-crack-detector-onnx",
         "engine_loaded": engine_ok,
     }
 
@@ -143,23 +154,25 @@ async def health():
 @app.post("/detect", dependencies=[Depends(verify_auth)])
 async def detect(
     image: UploadFile = File(..., description="Road/bridge image to inspect"),
-    inspection_mode: str = Form(default="road", description="road | bridge | general_infrastructure"),
-    prompt: Optional[str] = Form(default=None, description="Optional custom prompt override"),
-    multi_prompt: bool = Form(default=False, description="Run multiple prompts and merge detections"),
+    conf_threshold: Optional[float] = Form(default=None, description="Confidence threshold override"),
+    iou_threshold: Optional[float] = Form(default=None, description="IOU threshold override"),
     annotate: bool = Form(default=False, description="Include base64-encoded annotated image"),
 ):
     """
-    Run LocateAnything-3B on the provided image.
+    Run ONNX YOLO crack detection on the provided image.
+
+    The engine handles letterboxing to 640x640 internally and maps
+    bounding boxes back to original image coordinates.
 
     Returns normalized CivicLens detection JSON with bounding boxes.
     """
     t_req_start = time.perf_counter()
 
     # ── Model availability ────────────────────────────────────────────────────
-    if _engine is None or not _engine.is_loaded():
+    if _engine is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="LocateAnything model is not loaded. GPU may be unavailable.",
+            detail="ONNX model is not loaded.",
         )
 
     # ── Validate file size ────────────────────────────────────────────────────
@@ -191,12 +204,13 @@ async def detect(
         )
 
     # ── Run inference ─────────────────────────────────────────────────────────
-    logger.info(f"[/detect] {image.filename} | {img_w}x{img_h} | mode={inspection_mode} | multi={multi_prompt}")
+    logger.info(f"[/detect] {image.filename} | {img_w}x{img_h}")
     try:
-        if multi_prompt:
-            result = _engine.detect_multi_prompt(pil_img, inspection_mode=inspection_mode)
-        else:
-            result = _engine.detect(pil_img, prompt=prompt, inspection_mode=inspection_mode)
+        result = _engine.detect(
+            raw_bytes,
+            conf_threshold=conf_threshold,
+            iou_threshold=iou_threshold,
+        )
     except Exception as e:
         logger.exception(f"[/detect] Inference error: {e}")
         raise HTTPException(
@@ -215,10 +229,6 @@ async def detect(
         except Exception as e:
             logger.warning(f"[/detect] Annotation failed: {e}")
 
-    # ── Remove verbose debug fields from API response ─────────────────────────
-    result.pop("raw_output", None)
-    result.pop("raw_outputs", None)
-
     total_api_ms = round((time.perf_counter() - t_req_start) * 1000, 2)
     result["api_latency_ms"] = total_api_ms
 
@@ -229,18 +239,17 @@ async def detect(
 @app.post("/benchmark", dependencies=[Depends(verify_auth)])
 async def benchmark(image: UploadFile = File(...)):
     """
-    Phase 16: Run 5 consecutive inferences on the same image to measure
+    Run 5 consecutive inferences on the same image to measure
     warm inference latency and throughput.
     """
-    if _engine is None or not _engine.is_loaded():
+    if _engine is None:
         raise HTTPException(status_code=503, detail="Model not loaded.")
 
     raw_bytes = await image.read()
-    pil_img = Image.open(io.BytesIO(raw_bytes)).convert("RGB")
 
     timings = []
     for i in range(5):
-        result = _engine.detect(pil_img)
+        result = _engine.detect(raw_bytes)
         timings.append(result["timing_ms"]["total"])
 
     return {
