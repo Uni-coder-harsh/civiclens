@@ -98,6 +98,17 @@ class CrackONNXInferenceEngine:
         self.input_shape = self.input_meta.shape
         self.output_shape = self.output_meta.shape
 
+        # Dynamically adapt input_size to match model's expected shape if static
+        if len(self.input_shape) == 4 and isinstance(self.input_shape[2], int):
+            old_size = self.input_size
+            self.input_size = self.input_shape[2]
+            if old_size != self.input_size:
+                logger.info(
+                    "[ONNXEngine] Dynamic input size override: configured=%d, using model native resolution=%d",
+                    old_size,
+                    self.input_size,
+                )
+
         meta = self.session.get_modelmeta()
         custom_map = meta.custom_metadata_map or {}
         names_str = custom_map.get("names", "")

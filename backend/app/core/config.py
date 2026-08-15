@@ -52,7 +52,7 @@ class Settings(BaseSettings):
     MODEL_PATH: str = "ml-engine/best.onnx"
     MODEL_VERSION: str = "crack-detector-v1"
     MODEL_INPUT_SIZE: int = 640
-    MODEL_CONFIDENCE_THRESHOLD: float = 0.25
+    MODEL_CONFIDENCE_THRESHOLD: float = 0.15
     MODEL_IOU_THRESHOLD: float = 0.45
     MODEL_PROVIDER: str = "CPUExecutionProvider"
     # HuggingFace public repo — downloaded automatically on Railway cold start
