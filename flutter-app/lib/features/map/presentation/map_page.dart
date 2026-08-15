@@ -263,7 +263,7 @@ class _MapPageState extends ConsumerState<MapPage> {
               TileLayer(
                 urlTemplate: mapState.showSatellite
                     ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
-                    : 'https://tile.openstreetmap.org/{z}/{y}/{x}.png',
+                    : 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
                 userAgentPackageName: 'com.civiclens.app',
                 retinaMode: RetinaMode.isHighDensity(context),
               ),

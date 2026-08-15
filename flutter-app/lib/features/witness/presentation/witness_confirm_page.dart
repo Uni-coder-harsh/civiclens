@@ -399,13 +399,25 @@ class _ReportPreview extends StatelessWidget {
               fontSize: 16,
             ),
           ),
-          const SizedBox(height: 4),
+           const SizedBox(height: 4),
+          if (defect.address != null && defect.address!.isNotEmpty) ...[
+            Text(
+              defect.address!,
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
+                fontFamily: 'Inter',
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 2),
+          ],
           Text(
             '${defect.latitude.toStringAsFixed(4)}°, ${defect.longitude.toStringAsFixed(4)}°',
             style: TextStyle(
               color: Theme.of(context).textTheme.bodyMedium?.color ?? const Color(0xFF64748B),
               fontFamily: 'Inter',
-              fontSize: 12,
+              fontSize: 11,
             ),
           ),
         ],

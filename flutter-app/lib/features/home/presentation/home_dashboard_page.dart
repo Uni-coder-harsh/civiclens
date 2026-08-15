@@ -406,7 +406,9 @@ class HomeDashboardPage extends ConsumerWidget {
 
                         return _ActivityTile(
                           category: cleanCategory,
-                          location: 'Lat: ${defect.latitude.toStringAsFixed(5)}, Lng: ${defect.longitude.toStringAsFixed(5)}',
+                          location: (defect.address != null && defect.address!.isNotEmpty)
+                              ? defect.address!
+                              : 'Lat: ${defect.latitude.toStringAsFixed(5)}, Lng: ${defect.longitude.toStringAsFixed(5)}',
                           status: defect.status.name,
                           statusColor: statusColor,
                           icon: isBridgeType

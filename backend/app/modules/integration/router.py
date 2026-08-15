@@ -435,6 +435,17 @@ async def upload_infrastructure_report(request: Request, db: AsyncSession = Depe
     except Exception as ge_err:
         logger.warning(f"[Upload] Reverse geocoding note: {ge_err}")
 
+    # Verify if name is coordinate values
+    import re
+    if not address_str or address_str.strip() == "" or address_str == "Pune, India":
+        address_str = f"Area near {payload.capture.latitude:.4f}°, {payload.capture.longitude:.4f}°"
+        logger.info(f"[Upload] Geocoder did not return a specific street address; falling back to: {address_str}")
+    else:
+        address_clean = address_str.strip()
+        if re.match(r"^-?\d+\.?\d*[\s°,]*N?[\s,]+-?\d+\.?\d*[\s°,]*E?$", address_clean):
+            logger.warning(f"[Upload] Geocoder resolved address directly as coordinates: {address_clean}")
+            address_str = f"Area near {payload.capture.latitude:.4f}°, {payload.capture.longitude:.4f}°"
+
     # Save to Neon PostgreSQL database with geospatial point geometry
     try:
         # 1. Fetch default organization
@@ -813,6 +824,17 @@ async def fetch_defect(report_id: str, db: AsyncSession = Depends(get_db_session
             except Exception as e:
                 logger.warning(f"[Reports] Failed to reverse geocode {report.id}: {e}")
         
+        # Verify if resolved address is coordinate values
+        import re
+        if not address or address.strip() == "":
+            address = f"Area near {lat:.4f}°, {lng:.4f}°"
+            logger.info(f"[Reports] No geocoded address resolved for {report.id}. Using coordinate fallback.")
+        else:
+            address_clean = address.strip()
+            if re.match(r"^-?\d+\.?\d*[\s°,]*N?[\s,]+-?\d+\.?\d*[\s°,]*E?$", address_clean):
+                logger.warning(f"[Reports] Resolved address was coordinates format for {report.id}: {address_clean}")
+                address = f"Area near {lat:.4f}°, {lng:.4f}°"
+
         return {
             "report_id": str(report.id),
             "status": report.status,
@@ -834,6 +856,10 @@ async def fetch_defect(report_id: str, db: AsyncSession = Depends(get_db_session
     if not defect:
         logger.error(f"[Reports] 404 Defect not found for {report_id}")
         raise HTTPException(status_code=404, detail="Defect not found")
+    
+    # Ensure memory store returns a resolved address
+    if not defect.get("address"):
+        defect["address"] = defect.get("zone") or "Pune, India"
     return defect
 
 @router.get("/reports/{report_id}/ai-analysis")
