@@ -64,6 +64,10 @@ class _MapNotifier extends Notifier<_MapViewState> {
     state = state.copyWith(showSatellite: !state.showSatellite);
   }
 
+  void updateUserLocation(LatLng location) {
+    state = state.copyWith(userLocation: location);
+  }
+
   void onPositionChanged(LatLng center) {
     _lastCenter = center;
     _debounce?.cancel();
@@ -150,6 +154,7 @@ class _MapPageState extends ConsumerState<MapPage> {
   NearbyDefect? _activeWarningDefect;
   double _activeWarningDistance = 0.0;
   bool _isCriticalWarning = false;
+  bool _isMapCentered = false;
   final Set<String> _dismissedWarnings = {};
 
   @override
@@ -171,6 +176,17 @@ class _MapPageState extends ConsumerState<MapPage> {
     _positionStreamSub = Geolocator.getPositionStream(
       locationSettings: locationSettings,
     ).listen((position) {
+      final center = LatLng(position.latitude, position.longitude);
+      
+      // Update live position state so the blue dot moves
+      ref.read(_mapNotifierProvider.notifier).updateUserLocation(center);
+
+      // Centering map on the user's actual live location at max safe zoom
+      if (!_isMapCentered) {
+        _isMapCentered = true;
+        _mapController.move(center, 16.5);
+      }
+
       final mapState = ref.read(_mapNotifierProvider);
       if (mapState.defects.isEmpty) return;
 

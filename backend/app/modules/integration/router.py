@@ -421,17 +421,23 @@ async def upload_infrastructure_report(request: Request, db: AsyncSession = Depe
         from app.modules.infrastructure_identity.providers import ProviderRegistry
         registry = ProviderRegistry()
         geo_res = await registry.reverse_geocode(payload.capture.latitude, payload.capture.longitude)
-        if geo_res and geo_res.get("address"):
-            addr = geo_res["address"]
+        if geo_res:
+            road = geo_res.get("road_name")
+            suburb = geo_res.get("district")
+            city = geo_res.get("city")
+            
             parts = []
-            if "road" in addr: parts.append(addr["road"])
-            elif "pedestrian" in addr: parts.append(addr["pedestrian"])
-            elif "suburb" in addr: parts.append(addr["suburb"])
-            if "city" in addr: parts.append(addr["city"])
-            elif "town" in addr: parts.append(addr["town"])
-            if "state" in addr: parts.append(addr["state"])
+            if road and road != "Unknown Road":
+                parts.append(road)
+            if suburb:
+                parts.append(suburb)
+            if city:
+                parts.append(city)
+            
             if parts:
                 address_str = ", ".join(parts)
+            elif geo_res.get("display_name"):
+                address_str = geo_res.get("display_name")
     except Exception as ge_err:
         logger.warning(f"[Upload] Reverse geocoding note: {ge_err}")
 
@@ -810,17 +816,23 @@ async def fetch_defect(report_id: str, db: AsyncSession = Depends(get_db_session
         if lat != 0.0 and lng != 0.0:
             try:
                 geo_res = await registry.reverse_geocode(lat, lng)
-                if geo_res and geo_res.get("address"):
-                    addr = geo_res["address"]
-                    # Format a nice readable address string
+                if geo_res:
+                    road = geo_res.get("road_name")
+                    suburb = geo_res.get("district")
+                    city = geo_res.get("city")
+                    
                     parts = []
-                    if "road" in addr: parts.append(addr["road"])
-                    elif "pedestrian" in addr: parts.append(addr["pedestrian"])
-                    elif "suburb" in addr: parts.append(addr["suburb"])
-                    if "city" in addr: parts.append(addr["city"])
-                    elif "town" in addr: parts.append(addr["town"])
-                    if "state" in addr: parts.append(addr["state"])
-                    address = ", ".join(parts) if parts else None
+                    if road and road != "Unknown Road":
+                        parts.append(road)
+                    if suburb:
+                        parts.append(suburb)
+                    if city:
+                        parts.append(city)
+                    
+                    if parts:
+                        address = ", ".join(parts)
+                    elif geo_res.get("display_name"):
+                        address = geo_res.get("display_name")
             except Exception as e:
                 logger.warning(f"[Reports] Failed to reverse geocode {report.id}: {e}")
         
