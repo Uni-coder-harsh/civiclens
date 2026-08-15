@@ -77,7 +77,7 @@ async def delete_report(
     from datetime import datetime, timezone
     from sqlalchemy import select
     from app.modules.reports.model import CivicReport
-    from app.infrastructure.models import Inspection
+    from app.modules.inspections.model import Inspection
 
     report_uuid = None
     try:

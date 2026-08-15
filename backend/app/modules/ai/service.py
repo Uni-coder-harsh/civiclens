@@ -210,52 +210,66 @@ class AIService:
         # ── 2. Persist to DB ──────────────────────────────────────────────────
         log_id: Optional[uuid.UUID] = None
         try:
-            # Try to find an existing registered model record for this version
-            models = await self.model_repo.list()
-            model_record = next(
-                (m for m in models if m.version == engine.version), None
-            )
+            # Check if media_id exists in inspection_media to prevent foreign key violation
+            media_exists = False
+            if media_id:
+                from sqlalchemy import text
+                stmt = text("SELECT 1 FROM inspection_media WHERE id = :media_id")
+                res = await self.inference_repo.session.execute(stmt, {"media_id": media_id})
+                media_exists = res.scalar() is not None
 
-            if model_record is None:
-                # Auto-register the model if not yet in DB
-                model_record = await self.model_repo.create(
-                    AIModel(
-                        name="civiclens-crack-detector",
-                        version=engine.version,
-                        file_path=engine.model_path,
-                        is_active=True,
+            if media_exists:
+                # Try to find an existing registered model record for this version
+                models = await self.model_repo.list()
+                model_record = next(
+                    (m for m in models if m.version == engine.version), None
+                )
+
+                if model_record is None:
+                    # Auto-register the model if not yet in DB
+                    model_record = await self.model_repo.create(
+                        AIModel(
+                            name="civiclens-crack-detector",
+                            version=engine.version,
+                            file_path=engine.model_path,
+                            is_active=True,
+                        )
                     )
+
+                _media_id = media_id if media_id else _NULL_UUID
+                log = AIInferenceLog(
+                    model_id=model_record.id,
+                    media_id=_media_id,
+                    inference_duration_ms=duration_ms,
+                    status="SUCCESS",
                 )
+                await self.inference_repo.create(log)
+                log_id = log.id
 
-            _media_id = media_id if media_id else _NULL_UUID
-            log = AIInferenceLog(
-                model_id=model_record.id,
-                media_id=_media_id,
-                inference_duration_ms=duration_ms,
-                status="SUCCESS",
-            )
-            await self.inference_repo.create(log)
-            log_id = log.id
+                # Persist individual detections
+                for det in detections:
+                    bb = det["bounding_box"]
+                    # Store normalized coords [0,1] per existing schema convention
+                    x_center_n = ((bb["x1"] + bb["x2"]) / 2.0) / orig_w if orig_w > 0 else 0.0
+                    y_center_n = ((bb["y1"] + bb["y2"]) / 2.0) / orig_h if orig_h > 0 else 0.0
+                    width_n = bb["width"] / orig_w if orig_w > 0 else 0.0
+                    height_n = bb["height"] / orig_h if orig_h > 0 else 0.0
 
-            # Persist individual detections
-            for det in detections:
-                bb = det["bounding_box"]
-                # Store normalized coords [0,1] per existing schema convention
-                x_center_n = ((bb["x1"] + bb["x2"]) / 2.0) / orig_w if orig_w > 0 else 0.0
-                y_center_n = ((bb["y1"] + bb["y2"]) / 2.0) / orig_h if orig_h > 0 else 0.0
-                width_n = bb["width"] / orig_w if orig_w > 0 else 0.0
-                height_n = bb["height"] / orig_h if orig_h > 0 else 0.0
-
-                pred = AIPrediction(
-                    inference_log_id=log.id,
-                    class_name=det["class_name"],
-                    confidence=Decimal(str(round(det["confidence"], 4))),
-                    bbox_x_center=Decimal(str(round(x_center_n, 5))),
-                    bbox_y_center=Decimal(str(round(y_center_n, 5))),
-                    bbox_width=Decimal(str(round(width_n, 5))),
-                    bbox_height=Decimal(str(round(height_n, 5))),
+                    pred = AIPrediction(
+                        inference_log_id=log.id,
+                        class_name=det["class_name"],
+                        confidence=Decimal(str(round(det["confidence"], 4))),
+                        bbox_x_center=Decimal(str(round(x_center_n, 5))),
+                        bbox_y_center=Decimal(str(round(y_center_n, 5))),
+                        bbox_width=Decimal(str(round(width_n, 5))),
+                        bbox_height=Decimal(str(round(height_n, 5))),
+                    )
+                    await self.prediction_repo.create(pred)
+            else:
+                logger.info(
+                    f"[AIService] media_id={media_id} is not in inspection_media. "
+                    "Skipping DB log creation (CivicReport stores detections directly in its JSONB column)."
                 )
-                await self.prediction_repo.create(pred)
 
         except Exception as db_err:
             logger.warning(f"[AIService] DB persistence failed (inference result still returned): {db_err}")
@@ -284,6 +298,20 @@ class AIService:
         orig_h: int,
     ) -> None:
         """Shared DB persistence helper for both ONNX and LocateAnything results."""
+        if not media_id:
+            logger.info("[AIService] No media_id provided. Skipping DB persistence.")
+            return
+
+        from sqlalchemy import text
+        stmt = text("SELECT 1 FROM inspection_media WHERE id = :media_id")
+        res = await self.inference_repo.session.execute(stmt, {"media_id": media_id})
+        if res.scalar() is None:
+            logger.info(
+                f"[AIService] media_id={media_id} is not in inspection_media. "
+                "Skipping shared DB log persistence."
+            )
+            return
+
         models = await self.model_repo.list()
         model_record = next((m for m in models if m.version == model_version), None)
         if model_record is None:
