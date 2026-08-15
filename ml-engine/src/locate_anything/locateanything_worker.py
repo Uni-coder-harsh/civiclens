@@ -204,6 +204,9 @@ class LocateAnythingWorker:
         text = self.processor.py_apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True
         )
+        default_sys = "<|im_start|>system\nYou are a helpful assistant.\n<|im_end|>\n"
+        if text.startswith(default_sys):
+            text = text[len(default_sys):]
         images, videos = self.processor.process_vision_info(messages)
         inputs = self.processor(
             text=[text], images=images, videos=videos, return_tensors="pt"

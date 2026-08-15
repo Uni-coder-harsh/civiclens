@@ -28,6 +28,7 @@ def test_model(image_path: str, output_dir: Path):
         model_path="nvidia/LocateAnything-3B",
         device="cuda",
         dtype=torch.bfloat16,
+        use_batch_runtime=False,
     )
     print("  ✅ LocateAnythingWorker initialized and model loaded.")
 
@@ -62,6 +63,7 @@ def test_model(image_path: str, output_dir: Path):
                 categories=t["input"],
                 generation_mode="hybrid",
                 max_new_tokens=8192,
+                temperature=0.0,
             )
         else:
             # Call official ground_multi method
@@ -70,6 +72,7 @@ def test_model(image_path: str, output_dir: Path):
                 phrase=t["input"],
                 generation_mode="hybrid",
                 max_new_tokens=8192,
+                temperature=0.0,
             )
             
         latency_ms = (time.perf_counter() - t_start) * 1000
