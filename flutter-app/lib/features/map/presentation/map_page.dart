@@ -181,11 +181,10 @@ class _MapPageState extends ConsumerState<MapPage> {
       // Update live position state so the blue dot moves
       ref.read(_mapNotifierProvider.notifier).updateUserLocation(center);
 
-      // Centering map on the user's actual live location at max safe zoom
-      if (!_isMapCentered) {
-        _isMapCentered = true;
-        _mapController.move(center, 16.5);
-      }
+      // Follow the user's current live location on the map in real-time
+      final double currentZoom = _isMapCentered ? _mapController.camera.zoom : 16.5;
+      _isMapCentered = true;
+      _mapController.move(center, currentZoom);
 
       final mapState = ref.read(_mapNotifierProvider);
       if (mapState.defects.isEmpty) return;
