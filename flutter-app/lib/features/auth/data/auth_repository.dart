@@ -202,6 +202,8 @@ class MockAuthRepository implements AuthRepository {
         return 'System Administrator';
       case UserRole.citizen:
         return 'Verified Citizen';
+      case UserRole.activist:
+        return 'Active Citizen Journalist';
     }
   }
 

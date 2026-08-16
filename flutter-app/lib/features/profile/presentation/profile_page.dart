@@ -223,6 +223,8 @@ class HomeProfilePage extends ConsumerWidget {
         return const Color(0xFF818CF8);
       case UserRole.contractor:
         return const Color(0xFFF59E0B);
+      case UserRole.activist:
+        return const Color(0xFF8B5CF6);
       case UserRole.admin:
         return const Color(0xFFEF4444);
     }

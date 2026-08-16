@@ -1,7 +1,7 @@
 import 'escalation.dart';
 import 'report_payload.dart';
 
-enum UserRole { citizen, officer, contractor, admin }
+enum UserRole { citizen, officer, contractor, activist, admin }
 
 class ForbiddenException implements Exception {
   final String action;

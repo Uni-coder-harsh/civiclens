@@ -46,6 +46,7 @@ import '../../features/bridge_check/presentation/bridge_check_recording_page.dar
 import '../../features/bridge_check/presentation/bridge_check_verdict_page.dart';
 import '../../features/drone_upload/presentation/drone_upload_page.dart' as drone;
 import '../../features/capture/presentation/sweep_mode_page.dart';
+import '../../features/activist/presentation/activist_dashboard_page.dart';
 import '../../shared/ticket.dart';
 
 /// Provider exposing the configured [GoRouter] instance.
@@ -80,6 +81,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       // Note: /contractors, /contractor-search, /contractors/:id are public accountability records
       if (path.startsWith('/contractor/')) {
         if (!session.isContractor) {
+          return '/home/dashboard';
+        }
+      }
+
+      // RBAC guards for activist private portal routes (/activist/dashboard)
+      if (path.startsWith('/activist/')) {
+        if (!session.isActivist) {
           return '/home/dashboard';
         }
       }
@@ -245,6 +253,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         },
       ),
 
+      // Activist routes (RBAC guarded via redirect)
+      GoRoute(
+        path: '/activist/dashboard',
+        builder: (context, state) => const ActivistDashboardPage(),
+      ),
+
       // Share & Witness
       GoRoute(
         path: '/share',
@@ -371,6 +385,13 @@ class _DemoRoleSwitcherFab extends ConsumerWidget {
           isActive: currentRole == UserRole.contractor,
           onTap: () => _switchRole(ref, UserRole.contractor),
         ),
+        const SizedBox(height: 6),
+        _RoleChip(
+          label: 'Activist',
+          role: UserRole.activist,
+          isActive: currentRole == UserRole.activist,
+          onTap: () => _switchRole(ref, UserRole.activist),
+        ),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -419,6 +440,8 @@ class _RoleChip extends StatelessWidget {
         return const Color(0xFF4F46E5);
       case UserRole.contractor:
         return const Color(0xFFD97706);
+      case UserRole.activist:
+        return const Color(0xFF8B5CF6);
       case UserRole.admin:
         return const Color(0xFFDC2626);
     }

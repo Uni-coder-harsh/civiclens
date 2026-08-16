@@ -164,6 +164,8 @@ class _DemoRoleSwitcher extends ConsumerWidget {
         return const Color(0xFF4F46E5);
       case UserRole.contractor:
         return const Color(0xFFD97706);
+      case UserRole.activist:
+        return const Color(0xFF8B5CF6);
       case UserRole.admin:
         return const Color(0xFFDC2626);
     }

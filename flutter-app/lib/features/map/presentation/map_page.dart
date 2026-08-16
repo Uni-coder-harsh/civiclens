@@ -1124,6 +1124,11 @@ class _RoleActionPill extends ConsumerWidget {
         label = 'Hub';
         color = const Color(0xFFD97706);
         route = '/contractor/dashboard';
+      case UserRole.activist:
+        icon = Icons.campaign_rounded;
+        label = 'Campaign';
+        color = const Color(0xFF8B5CF6);
+        route = '/activist/dashboard';
       default:
         icon = Icons.badge_rounded;
         label = 'Passports';

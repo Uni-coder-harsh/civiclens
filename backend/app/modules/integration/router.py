@@ -1791,6 +1791,8 @@ async def auth_switch_role(body: SwitchRoleRequest):
         display_name = "Apex Infra Projects Ltd"
     elif role == "admin":
         display_name = "System Administrator"
+    elif role == "activist":
+        display_name = "Active Citizen Journalist"
     else:
         role = "citizen"
         display_name = "Verified Citizen"
@@ -2400,3 +2402,89 @@ async def upload_avatar(
             status_code=500,
             detail=f"Failed to upload avatar: {str(e)}"
         )
+
+# =====================================================================
+# AI Social Media Caption Generation Endpoints
+# =====================================================================
+
+class GenerateCaptionRequest(BaseModel):
+    category: str
+    severity: str
+    description: str
+    address: str
+    time_to_failure: str
+    custom_instruction: Optional[str] = None
+
+class GenerateCaptionResponse(BaseModel):
+    caption: str
+    tags: str
+
+@router.post("/ai/generate-caption", response_model=GenerateCaptionResponse)
+async def generate_social_caption(body: GenerateCaptionRequest):
+    groq_key = os.environ.get("GROQ_API_KEY", "").strip()
+    
+    category_label = body.category.replace("bridge", "Bridge ").replace("road", "Road ").capitalize()
+    hashtags = f"#CivicLens #InfrastructureRepair #{category_label.replace(' ', '')} #PublicSafety #GovernmentAccountability"
+    if body.address:
+        # Add clean address hashtag
+        loc_clean = "".join(c for c in body.address.split(",")[0] if c.isalnum())
+        if loc_clean:
+            hashtags += f" #{loc_clean}"
+
+    if groq_key:
+        try:
+            logger.info("[AI Social Caption] Requesting Groq API for caption generation...")
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                system_prompt = (
+                    "You are a professional social media manager and civic activist. "
+                    "Generate an engaging, highly urgent Instagram/Facebook caption and hashtags based on the provided structural damage details. "
+                    "Include information about time to complete failure, location, and severity. Use formatting, line breaks, and emojis. "
+                    "Ensure the tone is urgent to create public pressure on the municipality. "
+                    "Do NOT include system headers in the output. Just return the caption followed by the hashtags."
+                )
+                user_content = (
+                    f"Defect Category: {body.category} (Severity: {body.severity})\n"
+                    f"Location: {body.address}\n"
+                    f"Description: {body.description}\n"
+                    f"Calculated Time to Complete Failure: {body.time_to_failure}\n"
+                )
+                if body.custom_instruction:
+                    user_content += f"Custom Instruction/Focus: {body.custom_instruction}\n"
+
+                response = await client.post(
+                    "https://api.groq.com/openai/v1/chat/completions",
+                    headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+                    json={
+                        "model": "llama3-8b-8192",
+                        "messages": [
+                            {"role": "system", "content": system_prompt},
+                            {"role": "user", "content": user_content}
+                        ],
+                        "temperature": 0.7
+                    }
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    caption_text = data["choices"][0]["message"]["content"].strip()
+                    return {"caption": caption_text, "tags": hashtags}
+                else:
+                    logger.warning(f"[AI Social Caption] Groq API returned status {response.status_code}: {response.text}")
+        except Exception as e:
+            logger.error(f"[AI Social Caption] Failed to call Groq API: {e}")
+
+    # Fallback template caption
+    custom_insert = f"\n📢 Custom Activist Focus: {body.custom_instruction}" if body.custom_instruction else ""
+    
+    caption = (
+        f"🚨 URGENT HAZARD WARNING: PUBLIC SAFETY AT RISK 🚨\n\n"
+        f"A critical infrastructure defect has been reported and requires immediate attention!\n\n"
+        f"📍 Location: {body.address}\n"
+        f"⚠️ Severity: {body.severity.upper()}\n"
+        f"🏗️ Defect Type: {category_label}\n"
+        f"📝 Details: {body.description}\n\n"
+        f"⏱️ FORECAST ANALYSIS: Given current weather degradation factors, traffic stress loads, "
+        f"and the structural degradation index, this hazard is predicted to experience complete failure within **{body.time_to_failure}**.\n\n"
+        f"We need to demand immediate action from the municipal corporation. Please repost and share this to hold the local government accountable! {custom_insert}\n\n"
+        f"{hashtags}"
+    )
+    return {"caption": caption, "tags": hashtags}

@@ -40,6 +40,7 @@ class AuthSession {
   bool get isContractor => role == UserRole.contractor;
   bool get isCitizen => role == UserRole.citizen;
   bool get isAdmin => role == UserRole.admin;
+  bool get isActivist => role == UserRole.activist;
 
   AuthSession copyWith({
     String? userId,
