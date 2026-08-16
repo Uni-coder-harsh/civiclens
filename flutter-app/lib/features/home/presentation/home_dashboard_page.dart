@@ -33,6 +33,10 @@ class HomeDashboardPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final session = ref.watch(authSessionProvider);
+    if (session.role == UserRole.activist) {
+      return const _ActivistHomeDashboard();
+    }
+
     final scoreAsync = ref.watch(profileControllerProvider);
     final defectsAsync = ref.watch(dashboardDefectsProvider);
 
@@ -664,6 +668,513 @@ class _ActivityTile extends StatelessWidget {
                   color: Color(0xFF475569),
                 ),
               ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Social Media Activist Dashboard Landing View ───────────────────────────────
+
+class _ActivistHomeDashboard extends ConsumerStatefulWidget {
+  const _ActivistHomeDashboard();
+
+  @override
+  ConsumerState<_ActivistHomeDashboard> createState() => _ActivistHomeDashboardState();
+}
+
+class _ActivistHomeDashboardState extends ConsumerState<_ActivistHomeDashboard> {
+  @override
+  Widget build(BuildContext context) {
+    final session = ref.watch(authSessionProvider);
+    final defectsAsync = ref.watch(dashboardDefectsProvider);
+    final theme = Theme.of(context);
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF0F172A),
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: () => ref.refresh(dashboardDefectsProvider.future),
+          color: const Color(0xFF8B5CF6),
+          backgroundColor: const Color(0xFF1E293B),
+          child: CustomScrollView(
+            physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+            slivers: [
+              // Welcome Banner
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Activist Workspace,',
+                            style: TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 14,
+                              color: Color(0xFF94A3B8),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            session.displayName ?? 'Citizen Journalist',
+                            style: const TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 22,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              letterSpacing: -0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF8B5CF6).withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: const Color(0xFF8B5CF6).withOpacity(0.3)),
+                        ),
+                        child: const Text(
+                          'ACTIVIST',
+                          style: TextStyle(
+                            fontFamily: 'Inter',
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: Color(0xFFA78BFA),
+                            letterSpacing: 1.0,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Activist Influence & Reach Section
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'CAMPAIGN REACH & INFLUENCE',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF64748B),
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      GridView.count(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 12,
+                        mainAxisSpacing: 12,
+                        childAspectRatio: 1.6,
+                        children: [
+                          _ActivistMetricCard(
+                            label: 'Total Post Reach',
+                            value: '384.2K',
+                            trend: '+14% this wk',
+                            icon: Icons.trending_up_rounded,
+                            iconColor: const Color(0xFF10B981),
+                          ),
+                          _ActivistMetricCard(
+                            label: 'Repairs Sparked',
+                            value: '18 Defects',
+                            trend: '82% success',
+                            icon: Icons.check_circle_outline_rounded,
+                            iconColor: const Color(0xFF8B5CF6),
+                          ),
+                          _ActivistMetricCard(
+                            label: 'Rajkot Rank',
+                            value: '#3 Active',
+                            trend: 'Top 5% reach',
+                            icon: Icons.military_tech_rounded,
+                            iconColor: const Color(0xFFF59E0B),
+                          ),
+                          _ActivistMetricCard(
+                            label: 'Active Shares',
+                            value: '84.3K',
+                            trend: 'Direct retweets',
+                            icon: Icons.share_rounded,
+                            iconColor: const Color(0xFFEC4899),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Quick Actions
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'MOBILIZATION DESK',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF64748B),
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _ActivistDeskButton(
+                              title: 'AI Campaign Hub',
+                              subtitle: 'Generate captions/tags',
+                              icon: Icons.campaign_rounded,
+                              color: const Color(0xFF8B5CF6),
+                              onTap: () => context.push('/activist/dashboard'),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _ActivistDeskButton(
+                              title: 'Defects Map',
+                              subtitle: 'Explore hazard coordinates',
+                              icon: Icons.map_rounded,
+                              color: const Color(0xFF10B981),
+                              onTap: () => context.push('/map'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Active Campaigns Records
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'ACTIVE CAMPAIGNS & METRICS',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF64748B),
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      _ActiveCampaignRecord(
+                        title: 'Kalavad Road Pothole Collapse',
+                        location: '📍 Kalavad Road, Rajkot',
+                        views: '15.4K views',
+                        progress: 0.65,
+                        status: '📢 Campaign Active',
+                        statusColor: const Color(0xFFF59E0B),
+                      ),
+                      _ActiveCampaignRecord(
+                        title: 'Swargate Bridge Crack',
+                        location: '📍 Swargate, Pune',
+                        views: '45.2K views',
+                        progress: 1.0,
+                        status: '✅ Resolved (Repairs Started)',
+                        statusColor: const Color(0xFF10B981),
+                      ),
+                      _ActiveCampaignRecord(
+                        title: 'University Road Drainage Crater',
+                        location: '📍 Rajkot University Gate',
+                        views: '9.1K views',
+                        progress: 0.35,
+                        status: '📢 Campaign Active',
+                        statusColor: const Color(0xFFF59E0B),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Region Alerts requiring mobilization
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'OPEN HAZARDS REQUIRING CAMPAIGNS',
+                        style: TextStyle(
+                          fontFamily: 'Inter',
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF64748B),
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => context.push('/map'),
+                        child: const Text('View All', style: TextStyle(color: Color(0xFF8B5CF6), fontSize: 12)),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Defects Feed
+              defectsAsync.when(
+                data: (defects) {
+                  final regionDefects = defects.take(3).toList();
+                  if (regionDefects.isEmpty) {
+                    return const SliverToBoxAdapter(
+                      child: Center(
+                        child: Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: Text('No un-campaigned defects found nearby.', style: TextStyle(color: Color(0xFF64748B))),
+                        ),
+                      ),
+                    );
+                  }
+                  return SliverList(
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) {
+                        final d = regionDefects[index];
+                        final categoryName = d.category.name.replaceAllMapped(RegExp(r'([A-Z])'), (m) => ' ${m.group(1)}').toUpperCase();
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                          child: GestureDetector(
+                            onTap: () => context.push('/activist/dashboard'),
+                            child: _ReportItem(
+                              category: categoryName,
+                              location: d.address ?? 'Pune, India',
+                              status: d.aiSeverity?.toUpperCase() ?? 'MEDIUM',
+                              statusColor: const Color(0xFF8B5CF6),
+                              time: 'Un-campaigned · Launch AI post',
+                              icon: Icons.campaign_rounded,
+                            ),
+                          ),
+                        );
+                      },
+                      childCount: regionDefects.length,
+                    ),
+                  );
+                },
+                loading: () => const SliverToBoxAdapter(
+                  child: Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: CircularProgressIndicator(color: Color(0xFF8B5CF6)),
+                    ),
+                  ),
+                ),
+                error: (_, __) => const SliverToBoxAdapter(
+                  child: Center(
+                    child: Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Text('Failed to load local reports.', style: TextStyle(color: Color(0xFF64748B))),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// Helper metric card widget
+class _ActivistMetricCard extends StatelessWidget {
+  final String label;
+  final String value;
+  final String trend;
+  final IconData icon;
+  final Color iconColor;
+
+  const _ActivistMetricCard({
+    required this.label,
+    required this.value,
+    required this.trend,
+    required this.icon,
+    required this.iconColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF334155).withOpacity(0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8), fontWeight: FontWeight.w600),
+              ),
+              Icon(icon, color: iconColor, size: 16),
+            ],
+          ),
+          const Spacer(),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.white),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            trend,
+            style: TextStyle(fontSize: 9, color: iconColor.withOpacity(0.9), fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Helper desk action button
+class _ActivistDeskButton extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _ActivistDeskButton({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withOpacity(0.3), width: 1.5),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 28),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(fontSize: 10, color: Color(0xFF94A3B8)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Helper active campaign record card
+class _ActiveCampaignRecord extends StatelessWidget {
+  final String title;
+  final String location;
+  final String views;
+  final double progress;
+  final String status;
+  final Color statusColor;
+
+  const _ActiveCampaignRecord({
+    required this.title,
+    required this.location,
+    required this.views,
+    required this.progress,
+    required this.status,
+    required this.statusColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E293B),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFF334155).withOpacity(0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white),
+                ),
+              ),
+              Text(
+                views,
+                style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8), fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(location, style: const TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: LinearProgressIndicator(
+              value: progress,
+              backgroundColor: const Color(0xFF334155),
+              color: statusColor,
+              minHeight: 6,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                status,
+                style: TextStyle(color: statusColor, fontSize: 11, fontWeight: FontWeight.bold),
+              ),
+              const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF475569), size: 12),
             ],
           ),
         ],
