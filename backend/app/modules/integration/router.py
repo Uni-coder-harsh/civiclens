@@ -2435,6 +2435,7 @@ class GenerateCaptionResponse(BaseModel):
 
 @router.post("/ai/generate-caption", response_model=GenerateCaptionResponse)
 async def generate_social_caption(body: GenerateCaptionRequest):
+    logger.info(f"📢 [AI Social Caption] Generating campaign post: category={body.category}, severity={body.severity}, location={body.address}")
     groq_key = os.environ.get("GROQ_API_KEY", "").strip()
     
     category_label = body.category.replace("bridge", "Bridge ").replace("road", "Road ").capitalize()
@@ -2487,6 +2488,7 @@ async def generate_social_caption(body: GenerateCaptionRequest):
             logger.error(f"[AI Social Caption] Failed to call Groq API: {e}")
 
     # Fallback template caption
+    logger.info("[AI Social Caption] Using rule-based activist campaign template fallback.")
     custom_insert = f"\n📢 Custom Activist Focus: {body.custom_instruction}" if body.custom_instruction else ""
     
     caption = (

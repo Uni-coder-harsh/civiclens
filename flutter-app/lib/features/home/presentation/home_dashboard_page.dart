@@ -9,6 +9,7 @@ import '../../profile/application/profile_controller.dart';
 import '../../map/data/map_repository.dart';
 import '../../../shared/defect.dart';
 import '../../../shared/report_payload.dart';
+import '../../../shared/ticket.dart';
 
 /// Dynamic FutureProvider that queries the backend database for nearby defects
 /// based on the user's live GPS coordinates.
@@ -960,7 +961,7 @@ class _ActivistHomeDashboardState extends ConsumerState<_ActivistHomeDashboard> 
                           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
                           child: GestureDetector(
                             onTap: () => context.push('/activist/dashboard'),
-                            child: _ReportItem(
+                            child: _ActivityTile(
                               category: categoryName,
                               location: d.address ?? 'Pune, India',
                               status: d.aiSeverity?.toUpperCase() ?? 'MEDIUM',
