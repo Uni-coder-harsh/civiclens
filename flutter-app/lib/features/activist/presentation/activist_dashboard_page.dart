@@ -556,7 +556,7 @@ class _SocialCampaignSheetState extends ConsumerState<_SocialCampaignSheet> {
             // Generated Caption Preview
             Container(
               padding: const EdgeInsets.all(12),
-              maxHeight: 180,
+              constraints: const BoxConstraints(maxHeight: 180),
               width: double.infinity,
               decoration: BoxDecoration(
                 color: theme.scaffoldBackgroundColor,
