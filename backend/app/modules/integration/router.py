@@ -2067,6 +2067,20 @@ async def auth_email_verify(body: EmailVerifyRequest, db: AsyncSession = Depends
 async def auth_email_login(body: EmailLoginRequest, db: AsyncSession = Depends(get_db_session)):
     email_lower = body.email.strip().lower()
     
+    # Mock Activist bypass credentials
+    if email_lower == "activist@civiclens.gov.in" and body.password == "activist123":
+        logger.info("[Auth] Mock Activist logged in successfully.")
+        return {
+            "userId": "user_activist_rajkot",
+            "accessToken": "demo_token_activist",
+            "refreshToken": "mock_refresh_token_activist",
+            "isGuest": False,
+            "role": "activist",
+            "isIdentityVerified": True,
+            "phoneNumber": "+919876543211",
+            "displayName": "Active Citizen Journalist"
+        }
+
     # 1. Fetch user
     stmt = select(User).where(User.email == email_lower)
     res = await db.execute(stmt)

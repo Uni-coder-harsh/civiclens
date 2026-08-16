@@ -407,6 +407,14 @@ class _SocialCampaignSheetState extends ConsumerState<_SocialCampaignSheet> {
   bool _isLoading = false;
   final TextEditingController _instructionController = TextEditingController();
 
+  final List<Map<String, String>> _rajkotInfluencers = [
+    {'name': 'Rajkot Live News', 'handle': '@rajkotlivenews'},
+    {'name': 'Rajkot Municipal Corp.', 'handle': '@rajkot_municipal_corporation'},
+    {'name': 'Active Rajkot Group', 'handle': '@active_rajkot'},
+    {'name': 'Rajkot Updates', 'handle': '@rajkotupdates'},
+  ];
+  final Set<String> _selectedInfluencers = {};
+
   @override
   void initState() {
     super.initState();
@@ -417,6 +425,12 @@ class _SocialCampaignSheetState extends ConsumerState<_SocialCampaignSheet> {
   void dispose() {
     _instructionController.dispose();
     super.dispose();
+  }
+
+  String get _fullTagsText {
+    if (_selectedInfluencers.isEmpty) return _tags;
+    final handles = _selectedInfluencers.join(' ');
+    return '$handles\n$_tags';
   }
 
   Future<void> _generateCampaign([String? customInstruction]) async {
@@ -501,6 +515,44 @@ class _SocialCampaignSheetState extends ConsumerState<_SocialCampaignSheet> {
               ),
             )
           else ...[
+            // Target local Rajkot Influencers
+            Text(
+              'Target Local Channels & Authorities (Rajkot)',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: theme.colorScheme.onSurface),
+            ),
+            const SizedBox(height: 6),
+            SizedBox(
+              height: 48,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: _rajkotInfluencers.length,
+                itemBuilder: (context, index) {
+                  final inf = _rajkotInfluencers[index];
+                  final name = inf['name']!;
+                  final handle = inf['handle']!;
+                  final isSelected = _selectedInfluencers.contains(handle);
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: FilterChip(
+                      selectedColor: const Color(0xFF8B5CF6).withOpacity(0.2),
+                      selected: isSelected,
+                      label: Text('$name ($handle)', style: const TextStyle(fontSize: 10)),
+                      onSelected: (selected) {
+                        setState(() {
+                          if (selected) {
+                            _selectedInfluencers.add(handle);
+                          } else {
+                            _selectedInfluencers.remove(handle);
+                          }
+                        });
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 12),
+
             // Generated Caption Preview
             Container(
               padding: const EdgeInsets.all(12),
@@ -513,7 +565,7 @@ class _SocialCampaignSheetState extends ConsumerState<_SocialCampaignSheet> {
               ),
               child: SingleChildScrollView(
                 child: SelectableText(
-                  '$_caption\n\n$_tags',
+                  '$_caption\n\n$_fullTagsText',
                   style: const TextStyle(fontSize: 13, fontFamily: 'Inter'),
                 ),
               ),
@@ -552,7 +604,7 @@ class _SocialCampaignSheetState extends ConsumerState<_SocialCampaignSheet> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     onPressed: () {
-                      Clipboard.setData(ClipboardData(text: '$_caption\n\n$_tags'));
+                      Clipboard.setData(ClipboardData(text: '$_caption\n\n$_fullTagsText'));
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Campaign text copied to clipboard!')),
                       );
@@ -570,8 +622,17 @@ class _SocialCampaignSheetState extends ConsumerState<_SocialCampaignSheet> {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     onPressed: () async {
-                      // Share directly to Instagram Feed / Stories or general system share
-                      final text = '$_caption\n\n$_tags';
+                      // Copy to clipboard automatically first so they can paste easily on Instagram
+                      Clipboard.setData(ClipboardData(text: '$_caption\n\n$_fullTagsText'));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Activist Caption copied! Opening Share Sheet...'),
+                          duration: Duration(seconds: 2),
+                        ),
+                      );
+                      
+                      // Trigger share sheet
+                      final text = '$_caption\n\n$_fullTagsText';
                       await Share.share(text, subject: 'CivicLens activist mobilization campaign');
                     },
                   ),
